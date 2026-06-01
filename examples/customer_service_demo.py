@@ -23,24 +23,21 @@ async def main():
         temperature=0.7,
         max_tokens=2048,
     )
-    
+
     # 2. 创建 SellerEngine
-    engine = SellerEngine(
-        seller_id="seller_001",
-        model_config=model_config
-    )
-    
+    engine = SellerEngine(seller_id="seller_001", model_config=model_config)
+
     # 3. 注册业务 Skill
     engine.register_skill(OrderQuerySkill())
     engine.register_skill(FAQSkill())
-    
+
     # 4. 注册 MCP 工具
     engine.register_mcp_tool(ShopifyOrderTool(api_key="shopify_xxx"))
-    
+
     # 5. 处理客服查询
     query = "我的订单什么时候发货？订单号是 12345"
     response = await engine.handle_query(query)
-    
+
     print(f"用户: {query}")
     print(f"客服: {response}")
 
