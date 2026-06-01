@@ -1,0 +1,149 @@
+groups:
+  - name: agent-runtime-alerts
+    rules:
+      - alert: AgentAPIDown
+        expr: up{job="agent-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: agent-runtime
+        annotations:
+          summary: "Agent API is down"
+          description: "Agent API has been down for more than 1 minute"
+
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m])) by (job)
+          / sum(rate(http_requests_total[5m])) by (job) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          service: agent-runtime
+        annotations:
+          summary: "High HTTP 5xx error rate"
+          description: "HTTP 5xx error rate is above 5% for more than 2 minutes"
+
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, job)) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: agent-runtime
+        annotations:
+          summary: "High API latency"
+          description: "p95 latency is above 5 seconds for more than 5 minutes"
+
+      - alert: TaskQueueBacklog
+        expr: agent_queue_size > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: agent-runtime
+        annotations:
+          summary: "Task queue backlog"
+          description: "Task queue size is above 100 for more than 5 minutes"
+
+      - alert: HighTaskFailureRate
+        expr: |
+          sum(rate(agent_tasks_total{status="failure"}[5m])) by (job)
+          / sum(rate(agent_tasks_total[5m])) by (job) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: agent-runtime
+        annotations:
+          summary: "High task failure rate"
+          description: "Task failure rate is above 10% for more than 5 minutes"
+
+      - alert: ActiveTasksTooHigh
+        expr: agent_active_tasks > 1000
+        for: 5m
+        labels:
+          severity: warning
+          service: agent-runtime
+        annotations:
+          summary: "Too many active tasks"
+          description: "Number of active tasks is above 1000"
+
+      - alert: RedisConnectionFailed
+        expr: |
+          redis_connected_clients == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: agent-runtime
+        annotations:
+          summary: "Redis connection failed"
+          description: "Redis has no connected clients"
+
+      - alert: MemoryUsageHigh
+        expr: |
+          agent_memory_usage_bytes > 2 * 1024 * 1024 * 1024
+        for: 5m
+        labels:
+          severity: warning
+          service: agent-runtime
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is above 2GB"
+
+      - alert: ToolLatencyHigh
+        expr: |
+          histogram_quantile(0.95, sum(rate(agent_tool_duration_seconds_bucket[5m])) by (le, tool_name)) > 30
+        for: 5m
+        labels:
+          severity: warning
+          service: agent-runtime
+        annotations:
+          summary: "High tool latency - {{ $labels.tool_name }}"
+          description: "Tool {{ $labels.tool_name }} p95 latency is above 30 seconds"
+
+      - alert: APIRateLimitNear
+        expr: |
+          sum(rate(http_requests_total[1m])) by (job) > 50
+        for: 1m
+        labels:
+          severity: info
+          service: agent-runtime
+        annotations:
+          summary: "API rate limit approaching"
+          description: "API request rate is above 50 req/min"
+
+      - alert: CircuitBreakerOpen
+        expr: |
+          rate(agent_tool_calls_total{status="failure"}[5m]) > 0.8
+        for: 3m
+        labels:
+          severity: critical
+          service: agent-runtime
+        annotations:
+          summary: "Circuit breaker may be open"
+          description: "Tool failure rate is above 80% for more than 3 minutes"
+
+  - name: agent-runtime-sla
+    rules:
+      - alert: SLAMissErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m])) by (job)
+          / sum(rate(http_requests_total[5m])) by (job)) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+          service: agent-runtime
+          sla: availability
+        annotations:
+          summary: "SLA violation - Error Rate"
+          description: "Error rate is above 1%, SLA target is 99.9%"
+
+      - alert: SLAMissLatency
+        expr: |
+          histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: agent-runtime
+          sla: latency
+        annotations:
+          summary: "SLA warning - Latency"
+          description: "p99 latency is above 10 seconds"

@@ -1,0 +1,64 @@
+# 模型配置文件
+# 统一管理所有模型相关配置，修改后无需改动代码
+
+# LLM 模型配置
+llm:
+  provider: "openai-compatible"  # openai-compatible, openai, anthropic, huggingface
+  base_url: "http://192.168.3.191:8080/v1"  # 本地模型地址
+  api_key: ""  # 本地模型通常不需要
+  model: "Qwen/Qwen3-4B-GGUF:Q4_K_M"
+  timeout: 120.0
+  max_tokens: 1024
+  temperature: 0.7
+  top_p: 0.9
+  stream: false
+  system_prompt: "你是一个有帮助的AI助手。"
+
+# 嵌入模型配置
+embedding:
+  provider: "openai-compatible"  # openai-compatible, huggingface
+  base_url: null  # 如果为 null 则使用默认
+  api_key: ""
+  model: "text-embedding-3-small"
+  dimensions: 1536
+  batch_size: 32
+
+# Reranker 模型配置
+reranker:
+  provider: "openai-compatible"  # openai-compatible, huggingface, none
+  model: "BAAI/bge-reranker-v2-m3"
+  base_url: null
+  api_key: ""
+  top_n: 3
+
+# 向量数据库配置
+vector_store:
+  type: "chroma"  # chroma, pinecone, weaviate, milvus
+  host: "localhost"
+  port: 8000
+  collection_name: "knowledge_base"
+  persist_directory: "./data/chroma"
+
+# 本地模型部署配置
+local_models:
+  qwen3-4b:
+    name: "Qwen/Qwen3-4B-GGUF"
+    quantize: "Q4_K_M"
+    port: 8080
+    context_window: 8192
+  
+  qwen3-7b:
+    name: "Qwen/Qwen3-7B-GGUF"
+    quantize: "Q4_K_M"
+    port: 8081
+    context_window: 8192
+
+  embedding-large:
+    name: "BAAI/bge-large-en-v1.5"
+    port: 8082
+
+# 配置优先级:
+# 1. 命令行参数
+# 2. 环境变量 (LLM_BASE_URL, LLM_MODEL, etc.)
+# 3. 此配置文件
+# 4. 默认值

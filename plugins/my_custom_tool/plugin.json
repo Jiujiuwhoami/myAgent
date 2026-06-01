@@ -1,0 +1,11 @@
+{
+  "id": "my_custom_tool",
+  "name": "My Custom Tool",
+  "version": "1.0.0",
+  "description": "my_custom_tool 工具插件",
+  "author": "",
+  "enabled": true,
+  "tools": [
+    "my_custom_tool"
+  ]
+}

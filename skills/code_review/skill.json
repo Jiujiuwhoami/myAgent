@@ -1,0 +1,97 @@
+{
+  "meta": {
+    "name": "code_review",
+    "display_name": "代码审查",
+    "description": "代码审查技能，检查安全、性能、架构问题",
+    "version": "2.0.0",
+    "author": "",
+    "category": "development",
+    "tags": ["code", "review", "quality", "security", "performance"],
+    "license": "MIT",
+    "created_at": "2026-05-31",
+    "updated_at": "2026-05-31",
+    "homepage": "",
+    "source_url": ""
+  },
+  "trigger": {
+    "auto_trigger": true,
+    "trigger_keywords": [
+      "review",
+      "PR",
+      "pull request",
+      "code quality",
+      "check code",
+      "code review",
+      "audit",
+      "security check",
+      "代码审查",
+      "检查代码",
+      "代码质量",
+      "审查代码",
+      "检查",
+      "质量"
+    ],
+    "negative_keywords": [
+      "deploy",
+      "production",
+      "install",
+      "build",
+      "compile",
+      "部署",
+      "安装",
+      "编译"
+    ],
+    "match_mode": "any",
+    "priority": 10,
+    "min_confidence": 0.5
+  },
+  "parameters": [
+    {
+      "name": "file_path",
+      "type": "string",
+      "description": "要审查的文件路径",
+      "required": true,
+      "default": null,
+      "pattern": null
+    },
+    {
+      "name": "check_security",
+      "type": "boolean",
+      "description": "是否检查安全问题",
+      "required": false,
+      "default": true
+    },
+    {
+      "name": "check_performance",
+      "type": "boolean",
+      "description": "是否检查性能问题",
+      "required": false,
+      "default": true
+    },
+    {
+      "name": "check_architecture",
+      "type": "boolean",
+      "description": "是否检查架构问题",
+      "required": false,
+      "default": true
+    },
+    {
+      "name": "output_format",
+      "type": "string",
+      "description": "输出格式",
+      "required": false,
+      "default": "markdown",
+      "enum": ["markdown", "json"]
+    }
+  ],
+  "references": [
+    "references/security_checklist.md",
+    "references/performance_best_practices.md"
+  ],
+  "scripts": {
+    "pre_check": "scripts/pre_check.sh",
+    "generate_report": "scripts/generate_report.py"
+  },
+  "tools": ["terminal", "file", "search", "vision"],
+  "dependencies": []
+}

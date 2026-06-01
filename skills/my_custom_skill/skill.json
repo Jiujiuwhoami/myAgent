@@ -1,0 +1,22 @@
+{
+    "name": "my_custom_skill",
+    "display_name": "My Custom Skill",
+    "version": "1.0.0",
+    "description": "我的自定义自动化技能",
+    "author": "test_user",
+    "category": "automation",
+    "enabled": true,
+    "trigger": {
+        "trigger_keywords": ["my_custom_skill", "我的自定义自动化技能"],
+        "negative_keywords": [],
+        "confidence_threshold": 0.5
+    },
+    "parameters": {
+        "param1": {"type": "string", "description": "参数 1 说明", "required": false},
+        "param2": {"type": "integer", "description": "参数 2 说明", "required": false}
+    },
+    "metadata": {
+        "created_at": "auto-generated",
+        "tags": ["automation", "custom"]
+    }
+}

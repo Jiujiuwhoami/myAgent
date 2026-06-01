@@ -1,0 +1,22 @@
+{
+    "name": "my_test_skill",
+    "display_name": "My Test Skill",
+    "version": "1.0.0",
+    "description": "测试自定义技能",
+    "author": "developer",
+    "category": "development",
+    "enabled": true,
+    "trigger": {
+        "trigger_keywords": ["my_test_skill", "测试自定义技能"],
+        "negative_keywords": [],
+        "confidence_threshold": 0.5
+    },
+    "parameters": {
+        "param1": {"type": "string", "description": "参数 1 说明", "required": false},
+        "param2": {"type": "integer", "description": "参数 2 说明", "required": false}
+    },
+    "metadata": {
+        "created_at": "auto-generated",
+        "tags": ["development", "custom"]
+    }
+}

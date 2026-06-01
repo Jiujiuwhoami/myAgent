@@ -1,0 +1,32 @@
+# 工具配置文件
+# 支持启用/禁用插件，配置插件参数
+
+plugins:
+  weather:
+    enabled: true
+    config:
+      default_city: "北京"
+      cache_ttl: 300
+  
+  calculator:
+    enabled: true
+    config:
+      max_expression_length: 1000
+      timeout: 5
+  
+  search:
+    enabled: true
+    config:
+      default_limit: 10
+      timeout: 30
+
+tool_settings:
+  max_concurrent_calls: 10
+  default_timeout: 60
+  enable_cache: true
+  cache_ttl: 300
+
+rate_limits:
+  default: 60
+  search: 30
+  calculator: 100

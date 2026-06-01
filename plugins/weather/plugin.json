@@ -1,0 +1,10 @@
+{
+    "id": "weather",
+    "name": "天气查询",
+    "version": "1.0.0",
+    "description": "获取城市天气信息",
+    "author": "Agent Team",
+    "enabled": true,
+    "priority": 100,
+    "tools": ["weather"]
+}

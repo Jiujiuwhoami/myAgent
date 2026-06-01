@@ -1,0 +1,9 @@
+{
+    "id": "search",
+    "name": "搜索工具",
+    "version": "1.0.0",
+    "description": "网络搜索和信息检索",
+    "author": "Agent Team",
+    "enabled": true,
+    "tools": ["web_search", "news_search"]
+}

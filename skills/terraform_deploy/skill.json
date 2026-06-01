@@ -1,0 +1,79 @@
+{
+  "meta": {
+    "name": "terraform_deploy",
+    "display_name": "Terraform 部署",
+    "description": "自动化 Terraform 基础设施部署，支持代码验证、计划生成和实际部署",
+    "version": "1.0.0",
+    "author": "",
+    "category": "devops",
+    "tags": ["terraform", "infrastructure", "deployment", "devops", "cloud"],
+    "license": "MIT",
+    "created_at": "2026-05-31",
+    "updated_at": "2026-05-31",
+    "homepage": "",
+    "source_url": ""
+  },
+  "trigger": {
+    "auto_trigger": true,
+    "trigger_keywords": [
+      "terraform",
+      "deploy",
+      "部署",
+      "基础设施",
+      "infrastructure",
+      "cloud",
+      "发布",
+      "provision"
+    ],
+    "negative_keywords": [
+      "review",
+      "检查",
+      "code review",
+      "代码审查"
+    ],
+    "match_mode": "any",
+    "priority": 8,
+    "min_confidence": 0.5
+  },
+  "parameters": [
+    {
+      "name": "working_dir",
+      "type": "string",
+      "description": "Terraform 代码目录路径",
+      "required": true,
+      "default": null,
+      "pattern": null
+    },
+    {
+      "name": "auto_approve",
+      "type": "boolean",
+      "description": "是否自动批准部署（生产环境建议 false）",
+      "required": false,
+      "default": false
+    },
+    {
+      "name": "target_resource",
+      "type": "string",
+      "description": "指定部署的单个资源",
+      "required": false,
+      "default": null
+    },
+    {
+      "name": "var_file",
+      "type": "string",
+      "description": "变量文件路径",
+      "required": false,
+      "default": null
+    }
+  ],
+  "references": [
+    "references/terraform_best_practices.md",
+    "references/security_checklist.md"
+  ],
+  "scripts": {
+    "validate": "scripts/validate_tf.sh",
+    "plan_summary": "scripts/plan_summary.py"
+  },
+  "tools": ["terminal", "file", "search"],
+  "dependencies": ["terraform"]
+}

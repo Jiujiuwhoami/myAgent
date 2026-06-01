@@ -1,0 +1,80 @@
+{
+  "meta": {
+    "name": "docs_writer",
+    "display_name": "文档撰写",
+    "description": "自动化技术文档撰写，支持 README、API 文档、设计文档等",
+    "version": "1.0.0",
+    "author": "",
+    "category": "development",
+    "tags": ["documentation", "readme", "api-docs", "writing"],
+    "license": "MIT",
+    "created_at": "2026-05-31",
+    "updated_at": "2026-05-31",
+    "homepage": "",
+    "source_url": ""
+  },
+  "trigger": {
+    "auto_trigger": true,
+    "trigger_keywords": [
+      "document",
+      "文档",
+      "readme",
+      "API 文档",
+      "写文档",
+      "generate doc",
+      "changelog",
+      "设计文档"
+    ],
+    "negative_keywords": [
+      "deploy",
+      "部署",
+      "test",
+      "测试",
+      "build",
+      "编译"
+    ],
+    "match_mode": "any",
+    "priority": 7,
+    "min_confidence": 0.5
+  },
+  "parameters": [
+    {
+      "name": "doc_type",
+      "type": "string",
+      "description": "文档类型",
+      "required": true,
+      "default": null,
+      "enum": ["readme", "api", "design", "changelog", "user_guide"]
+    },
+    {
+      "name": "source_path",
+      "type": "string",
+      "description": "源代码/项目路径",
+      "required": true,
+      "default": null
+    },
+    {
+      "name": "output_format",
+      "type": "string",
+      "description": "输出格式",
+      "required": false,
+      "default": "markdown",
+      "enum": ["markdown", "html"]
+    },
+    {
+      "name": "output_path",
+      "type": "string",
+      "description": "输出路径",
+      "required": false,
+      "default": "."
+    }
+  ],
+  "references": [
+    "references/markdown_best_practices.md"
+  ],
+  "scripts": {
+    "generate": "scripts/generate_doc.py"
+  },
+  "tools": ["file", "search", "terminal"],
+  "dependencies": []
+}

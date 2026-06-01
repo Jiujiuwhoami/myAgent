@@ -1,0 +1,30 @@
+# myAgent 数据库配置文件
+# 支持 SQLite、PostgreSQL、MySQL
+
+database:
+  # 数据库类型：sqlite | postgresql | mysql
+  type: sqlite
+  
+  # SQLite 配置
+  path: agent_engine.db
+  
+  # PostgreSQL 配置（当 type=postgresql 时使用）
+  # host: localhost
+  # port: 5432
+  # name: myagent
+  # user: myagent
+  # password: your_password
+  
+  # MySQL 配置（当 type=mysql 时使用）
+  # host: localhost
+  # port: 3306
+  # name: myagent
+  # user: myagent
+  # password: your_password
+  
+  # 连接池配置（PostgreSQL/MySQL）
+  pool_size: 5
+  max_overflow: 10
+  
+  # 调试模式（打印 SQL）
+  echo: false

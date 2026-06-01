@@ -1,0 +1,92 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "myagent-framework"
+version = "2.1.0"
+description = "myAgent - 从零构建的 Agent 运行时系统"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+authors = [
+    {name = "myAgent Team", email = "team@myagent.dev"}
+]
+keywords = ["agent", "llm", "ai", "multi-agent", "runtime"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "sqlalchemy>=2.0.0",
+    "aiosqlite>=0.19.0",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "python-multipart>=0.0.6",
+    "httpx>=0.25.0",
+    "openai>=1.0.0",
+    "tiktoken>=0.5.0",
+    "nest-asyncio>=1.5.0",
+    "websockets>=12.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "black==24.10.0",
+    "ruff==0.8.0",
+    "mypy>=1.0.0",
+]
+postgres = [
+    "psycopg2-binary>=2.9.0",
+    "alembic>=1.12.0",
+]
+monitoring = [
+    "prometheus-client>=0.19.0",
+    "sentry-sdk[fastapi]>=1.38.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-org/myAgent"
+Documentation = "https://myagent.dev/docs"
+Repository = "https://github.com/your-org/myAgent.git"
+Issues = "https://github.com/your-org/myAgent/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend*", "core*", "llm*", "advanced*", "config*", "customer_service*",
+           "docs*", "examples*", "mcp*", "monitoring*", "multi_agent*", "plugins*",
+           "rag*", "runtime*", "skills*", "tasks*", "tests*"]
+namespaces = false
+
+[tool.black]
+line-length = 100
+target-version = ["py311", "py312"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "W", "I"]
+ignore = ["E501", "E402", "E722", "F401", "F811", "F821"]
+exclude = ["build/", "dist/"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
