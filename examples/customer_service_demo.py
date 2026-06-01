@@ -7,10 +7,11 @@
 """
 
 import asyncio
+
 from myAgent.backend.seller_engine import SellerEngine
-from myAgent.customer_service.model_config import ModelConfig, ModelSource, ModelProvider
-from myAgent.skills.customer_service.skill import OrderQuerySkill, FAQSkill
+from myAgent.customer_service.model_config import ModelConfig, ModelProvider, ModelSource
 from myAgent.mcp.shopify_integration import ShopifyOrderTool
+from myAgent.skills.customer_service.skill import FAQSkill, OrderQuerySkill
 
 
 async def main():
