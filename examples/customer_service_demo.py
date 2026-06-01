@@ -21,7 +21,7 @@ async def main():
         model_name="gpt-4o",
         api_key="sk-xxx",  # 从环境变量读取更安全
         temperature=0.7,
-        max_tokens=2048
+        max_tokens=2048,
     )
     
     # 2. 创建 SellerEngine
