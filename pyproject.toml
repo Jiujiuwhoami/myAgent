@@ -65,7 +65,7 @@ Issues = "https://github.com/your-org/myAgent/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["backend*", "core*", "llm*", "advanced*", "config*", "customer_service*",
+include = ["myAgent*", "backend*", "core*", "llm*", "advanced*", "config*", "customer_service*",
            "docs*", "examples*", "mcp*", "monitoring*", "multi_agent*", "plugins*",
            "rag*", "runtime*", "skills*", "tasks*", "tests*"]
 namespaces = false

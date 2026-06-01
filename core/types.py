@@ -31,6 +31,8 @@ class NodeStatus(Enum):
 class EventType(Enum):
     """事件类型"""
 
+    START = "start"
+    COMPLETE = "complete"
     TASK_CREATED = "task_created"
     TASK_STARTED = "task_started"
     TASK_COMPLETED = "task_completed"
