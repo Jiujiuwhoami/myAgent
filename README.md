@@ -1,8 +1,8 @@
-# 🤖 我的 Agent OS
+# 🤖 myAgent Framework
 
-这是一个**完全从零构建**的完整 Agent 运行时系统，支持本地 LLM 集成！
+一个**完全从零构建**的完整 Agent 运行时系统，支持本地 LLM 集成！
 
-**🆕 v2.1 新增**: 多用户后端引擎、API 服务器
+**🆕 v2.1 新增**: 多用户后端引擎、API 服务器、RAG 系统、监控模块
 
 ---
 
@@ -10,42 +10,112 @@
 
 ```
 myAgent/
-├── __init__.py              # 包初始化
-├── README.md                 # 本文件
-├── main.py                  # 🚀 主入口
-├── server.py                # 🆕 API 服务器入口
+├── README.md                    # 本文件
+├── pyproject.toml               # 项目配置
+├── .github/workflows/ci.yml     # CI/CD 配置
+├── .gitattributes               # Git 属性配置
+├── .gitignore                   # Git 忽略配置
 │
-├── core/                    # 核心组件
-│   ├── types.py             # 核心类型
-│   ├── task.py              # 任务模型和状态机
-│   ├── executor.py          # 工具执行器
-│   ├── dag.py               # DAG 和调度器
-│   ├── memory.py            # 三层记忆系统
-│   ├── event_bus.py         # 事件总线
-│   └── checkpoint.py        # 检查点系统
+├── core/                        # 核心组件
+│   ├── types.py                 # 核心类型定义
+│   ├── task.py                  # 任务模型和状态机
+│   ├── executor.py              # 工具执行器
+│   ├── dag.py                   # DAG 和调度器
+│   ├── memory.py                # 三层记忆系统
+│   ├── event_bus.py             # 事件总线
+│   ├── checkpoint.py            # 检查点系统
+│   ├── dag_checkpoint.py        # DAG 检查点
+│   ├── state_machine.py         # 状态机实现
+│   ├── statechart.py            # 状态图
+│   ├── recovery.py              # 故障恢复
+│   ├── graceful_shutdown.py     # 优雅关闭
+│   ├── graph_memory.py          # 图记忆
+│   ├── vector_store.py          # 向量存储
+│   ├── tool_registry.py         # 工具注册
+│   └── contracts.py             # 契约定义
 │
-├── backend_engine.py        # 🆕 多用户后端引擎
-│   ├── MultiUserEngine      # 核心引擎
-│   ├── Database             # SQLite 数据库
-│   ├── UserRuntime          # 用户隔离运行时
-│   └── TaskQueue            # 优先级任务队列
+├── backend/                     # 后端服务
+│   ├── engine.py                # 多用户后端引擎
+│   ├── server.py                # FastAPI 服务器
+│   ├── database.py              # SQLite 数据库
+│   ├── security.py              # 安全认证
+│   ├── cli.py                   # 命令行接口
+│   ├── user_skill.py            # 用户技能管理
+│   └── user_mcp.py              # 用户 MCP 管理
 │
-├── api_server.py            # 🆕 FastAPI API 层
+├── llm/                         # LLM 模块
+│   ├── client.py                # LLM 客户端
+│   ├── agent.py                 # LLM 智能代理
+│   ├── state_driver.py          # 状态驱动
+│   └── conversation_compressor.py # 对话压缩
 │
-├── llm_client.py            # 本地 LLM 客户端
-├── llm_agent.py             # LLM 智能代理
-├── streaming.py             # 流式输出支持
-├── intervention.py          # 人类介入支持
-├── nested_dag.py            # 子图嵌套支持
-├── skills/                  # 🆕 技能系统
-│   ├── code_review/         # 代码审查技能
-│   ├── cli.py               # 技能管理 CLI
-│   └── __init__.py          # 技能核心模块
-├── plugins/                 # 🆕 插件化工具系统
-│   ├── weather/            # 天气插件示例
-│   ├── calculator/         # 计算器插件示例
-│   └── search/             # 搜索插件示例
-└── docs/                    # 使用文档
+├── advanced/                    # 高级功能
+│   ├── streaming.py             # 流式输出支持
+│   ├── intervention.py          # 人类介入支持
+│   └── nested_dag.py            # 子图嵌套支持
+│
+├── runtime/                     # 运行时模块
+│   └── agent_runtime.py         # Agent 运行时
+│
+├── skills/                      # 技能系统
+│   ├── cli.py                   # 技能管理 CLI
+│   ├── scaffold.py              # 技能脚手架
+│   ├── v2.py                    # 技能 V2 接口
+│   ├── code_review/             # 代码审查技能
+│   ├── data_analyzer/           # 数据分析技能
+│   ├── docs_writer/             # 文档写作技能
+│   ├── terraform_deploy/        # Terraform 部署技能
+│   └── ...                      # 其他自定义技能
+│
+├── plugins/                     # 插件系统
+│   ├── weather/                 # 天气插件
+│   ├── calculator/              # 计算器插件
+│   ├── search/                  # 搜索插件
+│   └── my_custom_tool/          # 自定义工具插件
+│
+├── rag/                         # RAG 系统
+│   ├── loader.py                # 文档加载
+│   ├── splitter.py              # 文档分割
+│   ├── embedding.py             # 嵌入生成
+│   ├── pipeline.py              # RAG 管道
+│   ├── assembler.py             # 结果组装
+│   └── reranker.py              # 重排序
+│
+├── monitoring/                  # 监控模块
+│   ├── metrics.py               # 指标收集
+│   ├── alerts.py                # 告警系统
+│   └── grafana/                 # Grafana 配置
+│
+├── multi_agent/                 # 多智能体模块
+│   └── __init__.py              # 多智能体协调
+│
+├── mcp/                         # Model Context Protocol
+│   ├── __init__.py
+│   └── cli.py                   # MCP CLI
+│
+├── tasks/                       # 任务队列
+│   ├── __init__.py
+│   └── celery_app.py            # Celery 任务应用
+│
+├── config/                      # 配置文件
+│   ├── database.yaml            # 数据库配置
+│   ├── models.yaml              # 模型配置
+│   └── tools.yaml               # 工具配置
+│
+├── customer_service/            # 客服集成
+│   └── model_config.py          # 客服模型配置
+│
+├── examples/                    # 示例代码
+│   ├── main.py                  # 主示例
+│   ├── plugin_demo.py           # 插件演示
+│   └── customer_service_demo.py # 客服演示
+│
+├── tests/                       # 单元测试
+│   └── test_myagent.py          # 测试用例
+│
+└── docs/                        # 文档
+    ├── database-config.md       # 数据库配置文档
+    └── customer-service-integration.md # 客服集成文档
 ```
 
 ---
@@ -60,36 +130,48 @@ myAgent/
 | 记忆系统 | `core/memory.py` | Working/Episodic/Semantic |
 | 事件总线 | `core/event_bus.py` | 发布/订阅系统 |
 | 检查点 | `core/checkpoint.py` | 状态持久化 |
-| **本地 LLM** | `llm_client.py` | **Qwen3-4B @ 192.168.3.191:8080** |
-| **智能代理** | `llm_agent.py` | **LLM + 工具调用 + 多步推理** |
-| **流式输出** | `streaming.py` | **逐 token 流式传输** |
-| **人类介入** | `intervention.py` | **Human-in-the-loop** |
-| **子图嵌套** | `nested_dag.py` | **层次化 DAG** |
-| **🆕 多用户后端** | `backend_engine.py` | **用户隔离 + 并发控制** |
-| **🆕 API 服务器** | `api_server.py` | **FastAPI REST 接口** |
-| **🆕 Skill 系统** | `skills/` | **可复用工作流管理** |
+| 状态机 | `core/state_machine.py` | 有限状态机 |
+| 图记忆 | `core/graph_memory.py` | 图结构记忆 |
+| 向量存储 | `core/vector_store.py` | 向量数据库 |
+| **本地 LLM** | `llm/client.py` | 本地/远程 LLM 支持 |
+| **智能代理** | `llm/agent.py` | LLM + 工具调用 + 多步推理 |
+| **流式输出** | `advanced/streaming.py` | 逐 token 流式传输 |
+| **人类介入** | `advanced/intervention.py` | Human-in-the-loop |
+| **子图嵌套** | `advanced/nested_dag.py` | 层次化 DAG |
+| **多用户后端** | `backend/engine.py` | 用户隔离 + 并发控制 |
+| **API 服务器** | `backend/server.py` | FastAPI REST 接口 |
+| **RAG 系统** | `rag/` | 检索增强生成 |
+| **技能系统** | `skills/` | 可复用工作流管理 |
+| **插件系统** | `plugins/` | 插件化工具系统 |
+| **监控告警** | `monitoring/` | 指标收集和告警 |
 
 ---
 
 ## 🚀 快速开始
 
-### 本地演示模式
+### 安装依赖
 
 ```bash
-cd /mnt/c/Users/六度的电脑/Desktop/agent_runtime_training
-python -m myAgent.server --mode demo
+cd myAgent
+pip install -e .
+```
+
+### 开发模式安装
+
+```bash
+pip install -e ".[dev]"
 ```
 
 ### 启动 API 服务器
 
 ```bash
 # 启动服务器
-python -m myAgent.server --mode server --host 0.0.0.0 --port 8000
+python -m backend.server --host 0.0.0.0 --port 8000
 
 # 或使用环境变量
 export AGENT_DB_PATH=/path/to/database.db
 export AGENT_MAX_WORKERS=10
-python -m myAgent.server --mode server
+python -m backend.server
 ```
 
 ### API 文档
@@ -132,12 +214,6 @@ python -m myAgent.server --mode server
 │                    Worker Pool (并发处理)                         │
 │  Worker 0  Worker 1  Worker 2  ...  Worker N                     │
 └─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    本地 LLM (Qwen3-4B)                            │
-│                    http://192.168.3.191:8080                     │
-└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -149,7 +225,7 @@ python -m myAgent.server --mode server
 每个用户拥有独立的 AgentRuntime 实例，互不干扰：
 
 ```python
-from myAgent.backend_engine import MultiUserEngine
+from backend.engine import MultiUserEngine
 
 engine = MultiUserEngine()
 
@@ -158,8 +234,6 @@ runtime_a = engine.get_user_runtime(user_a_id)
 
 # 用户 B 的运行时
 runtime_b = engine.get_user_runtime(user_b_id)
-
-# 两者完全隔离
 ```
 
 ### 2. 并发控制
@@ -169,10 +243,6 @@ runtime_b = engine.get_user_runtime(user_b_id)
 ```python
 # 创建用户，限制并发数为 3
 user = engine.register_user("alice", "password", max_concurrent=3)
-
-# 提交第 4 个任务会失败
-task = await engine.submit_task(user.id, "task", {})
-# ValueError: 达到并发限制: 3/3
 ```
 
 ### 3. 优先级队列
@@ -180,31 +250,15 @@ task = await engine.submit_task(user.id, "task", {})
 任务支持优先级（LOW < NORMAL < HIGH < CRITICAL）：
 
 ```python
-from myAgent.backend_engine import TaskPriority
+from backend.engine import TaskPriority
 
-# 高优先级任务先执行
 task = await engine.submit_task(
     user_id, "紧急任务", {"data": "..."},
     priority=TaskPriority.CRITICAL
 )
 ```
 
-### 4. 数据库持久化
-
-所有数据持久化到 SQLite（可升级到 PostgreSQL）：
-
-```sql
--- 用户表
-CREATE TABLE users (id, username, password_hash, role, ...);
-
--- 会话表
-CREATE TABLE sessions (session_id, user_id, token, ...);
-
--- 任务表
-CREATE TABLE tasks (id, user_id, task_name, state, ...);
-```
-
-### 5. API 接口
+### 4. API 接口
 
 完整的 REST API：
 
@@ -236,8 +290,6 @@ curl -X POST http://localhost:8000/api/v1/users \
 curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username": "alice", "password": "password123"}'
-
-# 返回: {"token": "uuid...", "user": {...}}
 ```
 
 ### 提交任务
@@ -249,40 +301,91 @@ curl -X POST http://localhost:8000/api/v1/tasks \
   -d '{"task_name": "测试任务", "input_data": {"message": "Hello"}}'
 ```
 
-### 查询任务状态
+---
+
+## 🔧 技能系统
+
+### 创建技能
 
 ```bash
-curl http://localhost:8000/api/v1/tasks/task_id \
-  -H "X-Token: <your_token>"
+# 使用 CLI 创建技能
+python -m skills.cli create my_new_skill
+
+# 或使用脚手架
+python -m skills.scaffold create --name my_new_skill
+```
+
+### 技能结构
+
+每个技能包含：
+- `skill.py` - 技能实现
+- `skill.json` - 技能元数据
+- `SKILL.md` - 技能文档
+- `references/` - 参考文档
+- `scripts/` - 辅助脚本
+
+---
+
+## 🔌 插件系统
+
+### 安装插件
+
+```bash
+# 安装插件
+python -m plugins.cli install weather
+
+# 列出已安装插件
+python -m plugins.cli list
 ```
 
 ---
 
-##  与 LangGraph 对比
+## 🧪 测试
 
-| 功能 | LangGraph | 我们的项目 v2.1 |
-|------|-----------|-----------------|
-| 流式输出 | ✅ 原生 | ✅ 已实现 |
-| 人类介入 | ✅ 原生 | ✅ 已实现 |
-| 子图嵌套 | ✅ 原生 | ✅ 已实现 |
-| **多用户** | ❌ 需自研 | ✅ **已实现** |
-| **API 服务器** | ❌ 需自研 | ✅ **已实现** |
-| 依赖大小 | ~50MB+ | ~5MB |
-| 学习曲线 | 陡峭 | 平缓 |
-| 本地 LLM | 需配置 | ✅ 原生 |
+```bash
+# 运行所有测试
+pytest tests/ -v
+
+# 带覆盖率报告
+pytest tests/ -v --cov=myAgent --cov-report=html
+```
 
 ---
 
-## 🏗️ 从零构建！
+## 🔧 代码风格检查
+
+```bash
+# black 格式化检查
+black --check .
+
+# ruff 静态检查
+ruff check .
+
+# 自动修复
+ruff check --fix .
+```
+
+---
+
+## 🏗️ 项目特点
 
 - ✅ 所有核心组件都在 `core/` 目录
 - ✅ 完整的类型定义和数据结构
-- ✅ 本地 LLM 集成（Qwen3-4B）
+- ✅ 本地/远程 LLM 集成
 - ✅ 流式输出、人类介入、子图嵌套
-- ✅ **多用户后端引擎**
-- ✅ **FastAPI API 服务器**
+- ✅ 多用户后端引擎
+- ✅ FastAPI API 服务器
+- ✅ RAG 检索增强生成
+- ✅ 技能和插件系统
+- ✅ 监控和告警
 - ✅ 可以直接运行！
 
 ---
 
 祝你玩得开心！🎊
+
+---
+
+## 📄 许可证
+
+MIT License
