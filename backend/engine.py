@@ -747,7 +747,14 @@ class MultiUserEngine:
                             skill_name, config, confidence = best
                             if config.enabled and confidence >= config.trigger.min_confidence:
                                 print(f"   🎯 Skill 自动触发: {config.display_name} (confidence={confidence:.2f})")
-                                skill_result = await sm.run_skill(skill_name, task_input=task.input_data)
+                                # 将 task_input 中的键作为关键字参数传入
+                                skill_kwargs = {k: v for k, v in task.input_data.items() if k != "type"}
+                                try:
+                                    skill_result = await sm.run_skill(skill_name, **skill_kwargs)
+                                except TypeError as te:
+                                    # 参数不匹配，记录警告但继续
+                                    print(f"   [WARN] Skill params mismatch: {te}")
+                                    skill_result = {"success": False, "error": f"Skill参数不匹配: {te}"}
                                 task.result = skill_result
                                 skill_triggered = True
                     except Exception as se:
