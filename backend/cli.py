@@ -17,6 +17,13 @@ import asyncio
 import os
 import sys
 
+# 自动加载 .env 文件
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv 未安装则跳过
+
 # 确保可以找到模块
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_dir = os.path.dirname(current_dir)
