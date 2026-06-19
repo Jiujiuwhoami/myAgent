@@ -14,8 +14,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set
 
-from core.dag import DAG
-from core.types import NodeStatus
+from myAgent.core.dag import DAG
+from myAgent.core.types import NodeStatus
 
 
 class CheckpointType(Enum):

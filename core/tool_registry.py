@@ -32,12 +32,12 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from core.types import ExecutionResult
+from myAgent.core.types import ExecutionResult
 
 # 导入各子系统
-from core.types import Tool as CoreTool
-from plugins import PluginManager
-from skills import SkillManager
+from myAgent.core.types import Tool as CoreTool
+from myAgent.plugins import PluginManager
+from myAgent.skills import SkillManager
 
 
 class ToolSource(Enum):
@@ -229,21 +229,25 @@ class ToolRegistry:
         if self.skill_manager:
             for skill_name in self.skill_manager.list_skills():
                 if skill_name not in self._tools:
-                    skill = self.skill_manager.get_skill(skill_name)
-                    if skill:
+                    skill_info = self.skill_manager.get_skill_info(skill_name)
+                    if skill_info:
+                        config = skill_info.config
+                        meta = config.meta if isinstance(config.meta, dict) else config.meta.__dict__ if hasattr(config.meta, '__dict__') else {}
+                        category_val = meta.get('category', '').value if hasattr(meta.get('category', ''), 'value') else meta.get('category', '')
+                        tags_val = meta.get('tags', [])
                         unified = UnifiedTool(
                             name=skill_name,
-                            description=skill.description,
-                            input_schema=skill.get_param_schema(),
+                            description=config.description,
+                            input_schema=config.parameters if hasattr(config, 'parameters') else [],
                             source=ToolSource.SKILL,
-                            version=skill.config.meta.version,
-                            author=skill.config.meta.author,
-                            category=skill.config.meta.category.value,
-                            tags=skill.config.meta.tags,
+                            version=str(meta.get('version', '0.0.0')),
+                            author=str(meta.get('author', '')),
+                            category=str(category_val),
+                            tags=tags_val if isinstance(tags_val, list) else [],
                             handler=self._create_skill_handler(skill_name),
                             metadata={
-                                "version": skill.config.meta.version,
-                                "category": skill.config.meta.category.value,
+                                "version": str(meta.get('version', '0.0.0')),
+                                "category": str(category_val),
                             },
                         )
                         self._tools[skill_name] = unified

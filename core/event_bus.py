@@ -4,7 +4,7 @@
 
 from typing import Awaitable, Callable, Dict, List, Optional
 
-from core.types import Event, EventType
+from myAgent.core.types import Event, EventType
 
 
 class EventBus:

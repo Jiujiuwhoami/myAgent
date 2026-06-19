@@ -6,7 +6,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 
-from core.types import NodeStatus
+from myAgent.core.types import NodeStatus
 
 
 @dataclass

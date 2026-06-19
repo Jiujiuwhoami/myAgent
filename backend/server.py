@@ -125,12 +125,17 @@ def create_app(engine: MultiUserEngine) -> FastAPI:
             raise HTTPException(status_code=400, detail="无效的角色")
 
         engine = get_engine()
-        user_obj = engine.register_user(
-            username=user.username,
-            password=user.password,
-            role=role,
-            max_concurrent=user.max_concurrent_tasks,
-        )
+        try:
+            user_obj = engine.register_user(
+                username=user.username,
+                password=user.password,
+                role=role,
+                max_concurrent=user.max_concurrent_tasks,
+            )
+        except Exception as e:
+            if "UNIQUE" in str(e) or "duplicate" in str(e).lower():
+                raise HTTPException(status_code=409, detail="用户名已存在")
+            raise
 
         # 自动生成 JWT Token
         token = engine.login(user.username, user.password)

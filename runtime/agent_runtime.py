@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Union
 
-from core import (
+from myAgent.core import (
     DAG,
     AgentFSM,
     CheckpointManager,
@@ -22,8 +22,8 @@ from core import (
     TaskStatus,
     Tool,
 )
-from core.tool_registry import ToolRegistry, ToolSource, UnifiedTool
-from skills import SkillConfigV2, SkillManager, SkillTriggerEngine
+from myAgent.core.tool_registry import ToolRegistry, ToolSource, UnifiedTool
+from myAgent.skills import SkillConfigV2, SkillManager, SkillTriggerEngine
 
 
 @dataclass
@@ -296,7 +296,13 @@ class AgentRuntime:
         """执行单个任务"""
         task = self._tasks.get(task_id)
         if not task:
-            raise ValueError(f"任务不存在: {task_id}")
+            # 如果 task 不存在（比如来自外部提交），自动创建
+            task = Task(
+                name=f"Task-{task_id[:8]}",
+                input_data=kwargs,
+                max_retries=self.config.max_retries,
+            )
+            self._tasks[task_id] = task
 
         if not self.fsm.transition(task, TaskStatus.RUNNING):
             return task

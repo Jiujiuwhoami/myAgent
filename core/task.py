@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from core.types import TaskStatus
+from myAgent.core.types import TaskStatus
 
 
 @dataclass

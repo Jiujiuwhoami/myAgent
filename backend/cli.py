@@ -37,7 +37,7 @@ def create_engine():
     from backend.engine import MultiUserEngine
 
     db_path = os.getenv("AGENT_DB_PATH", "agent_engine.db")
-    max_workers = int(os.getenv("AGENT_MAX_WORKERS", "10"))
+    max_workers = int(os.getenv("AGENT_MAX_WORKERS", "4"))
     jwt_secret = os.getenv("JWT_SECRET_KEY", None)
 
     llm_config = LLMConfig.from_env()
@@ -59,7 +59,9 @@ def run_server(host: str = "0.0.0.0", port: int = 8000, debug: bool = False):
     from backend.server import create_app
 
     engine = create_engine()
-    _global_engine = engine
+    # 设置 engine.py 模块级别的全局变量，供 server.py 的 get_engine() 使用
+    import backend.engine as engine_module
+    engine_module._global_engine = engine
 
     # 创建应用
     app = create_app(engine)
@@ -76,7 +78,7 @@ def run_server(host: str = "0.0.0.0", port: int = 8000, debug: bool = False):
     print(f"   文档: http://{host}:{port}/docs")
     print(f"   健康: http://{host}:{port}/api/v1/health")
     print(f"\n   数据库: {os.getenv('AGENT_DB_PATH', 'agent_engine.db')}")
-    print(f"   工作线程: {os.getenv('AGENT_MAX_WORKERS', '10')}")
+    print(f"   工作线程: {os.getenv('AGENT_MAX_WORKERS', '4')}")
     print("   JWT 认证: 已启用")
     print(f"   LLM: {os.getenv('LLM_MODEL', 'Qwen/Qwen3-4B-GGUF:Q4_K_M')}")
     print("\n" + "=" * 60)

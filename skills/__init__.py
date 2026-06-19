@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 # V2 核心模块导入（Codex 兼容格式）
-from skills.v2 import (
+from myAgent.skills.v2 import (
     SkillConfigV2,
     SkillLoader,
     SkillTrigger,
@@ -189,7 +189,7 @@ class SkillInfo:
 
 
 # 导入创建模板函数
-from skills.scaffold import create_mcp_tool_template, create_skill_scaffold
+from myAgent.skills.scaffold import create_mcp_tool_template, create_skill_scaffold
 
 __all__ = [
     # V2 核心类

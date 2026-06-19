@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 from typing import Dict, Optional
 
-from core.types import ExecutionResult, Tool
+from myAgent.core.types import ExecutionResult, Tool
 
 
 class Executor:

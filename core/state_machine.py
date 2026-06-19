@@ -5,8 +5,8 @@
 from datetime import datetime
 from typing import Callable, Dict, Set
 
-from core.task import Task
-from core.types import TaskStatus
+from myAgent.core.task import Task
+from myAgent.core.types import TaskStatus
 
 
 class AgentFSM:
