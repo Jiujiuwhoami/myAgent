@@ -33,8 +33,8 @@ if project_dir not in sys.path:
 
 def create_engine():
     """创建后端引擎"""
-    from ..llm.client import LLMConfig
-    from .engine import MultiUserEngine
+    from myAgent.llm.client import LLMConfig
+    from backend.engine import MultiUserEngine
 
     db_path = os.getenv("AGENT_DB_PATH", "agent_engine.db")
     max_workers = int(os.getenv("AGENT_MAX_WORKERS", "10"))
@@ -55,21 +55,22 @@ def create_engine():
 def run_server(host: str = "0.0.0.0", port: int = 8000, debug: bool = False):
     """运行 API 服务器"""
     import uvicorn
+    from backend.engine import MultiUserEngine
+    from backend.server import create_app
 
-    from .engine import _global_engine
-    from .server import create_app
-
-    # 创建引擎
     engine = create_engine()
     _global_engine = engine
-
-    # 启动引擎后台处理
-    asyncio.create_task(engine.start())
 
     # 创建应用
     app = create_app(engine)
 
-    # 运行服务器
+    # 启动后台引擎
+    async def start_server():
+        await engine.start()
+        config = uvicorn.Config(app, host=host, port=port, log_level="info" if not debug else "debug")
+        server = uvicorn.Server(config)
+        await server.serve()
+
     print("\n🚀 Agent Runtime API Server")
     print(f"   地址: http://{host}:{port}")
     print(f"   文档: http://{host}:{port}/docs")
@@ -80,19 +81,14 @@ def run_server(host: str = "0.0.0.0", port: int = 8000, debug: bool = False):
     print(f"   LLM: {os.getenv('LLM_MODEL', 'Qwen/Qwen3-4B-GGUF:Q4_K_M')}")
     print("\n" + "=" * 60)
 
-    uvicorn.run(
-        app,
-        host=host,
-        port=port,
-        log_level="info" if not debug else "debug",
-    )
+    asyncio.run(start_server())
 
 
 def run_demo():
     """运行本地演示（无服务器）"""
     import asyncio
 
-    from .engine import UserRole
+    from backend.engine import UserRole
 
     async def demo():
         print("\n" + "=" * 60)
