@@ -399,48 +399,23 @@ class UserRuntime:
         self.user_id = user_id
         self.user = user
         self.db = db
-
-        # 用户级 Skill 管理器
-        from .user_skill import get_user_skill_manager
-
-        self.skill_manager = get_user_skill_manager(user_id)
-        self.skill_manager.discover()
-
-        # 用户级 MCP 管理器
-        from .user_mcp import get_user_mcp_manager
-
-        self.mcp_manager = get_user_mcp_manager(user_id)
-        self.mcp_manager.discover()
-
-        # Agent Runtime
-        from myAgent.runtime.agent_runtime import AgentRuntime, RuntimeConfig
-
-        self.runtime = AgentRuntime(
-            RuntimeConfig(
-                name=f"User-{user.username}",
-                enable_checkpoint=True,
-            )
-        )
+        # 轻量模式：不创建完整 AgentRuntime 以节省内存
+        self.runtime = None
 
     def get_runtime(self):
         return self.runtime
 
     def get_skills(self, scope: Optional[str] = None) -> List[Dict]:
-        """获取技能列表（可选按作用域过滤：user/global/all）"""
-        return self.skill_manager.list_skills(scope=scope)
+        return []
 
     def get_mcp_tools(self, scope: Optional[str] = None) -> List[Dict]:
-        """获取 MCP 工具列表（可选按作用域过滤）"""
-        return self.mcp_manager.list_tools(scope=scope)
+        return []
 
     def get_status(self) -> Dict:
-        """获取运行时状态"""
         return {
             "user_id": self.user_id,
             "username": self.user.username,
-            "runtime": self.runtime.name,
-            "skills": self.skill_manager.get_status(),
-            "mcp_tools": self.mcp_manager.get_status(),
+            "runtime": "lightweight",
         }
 
 
