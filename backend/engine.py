@@ -658,6 +658,16 @@ class MultiUserEngine:
     async def _worker(self, worker_id: int):
         print(f"🔄 Worker {worker_id} 启动")
 
+        # 延迟导入 LLM client，避免启动时连接
+        llm_client = None
+        if self.llm_config:
+            try:
+                from myAgent.llm.client import LLMClient
+                llm_client = LLMClient(self.llm_config)
+                print(f"   [OK] LLM ready: {self.llm_config.model} @ {self.llm_config.base_url}")
+            except Exception as e:
+                print(f"   [WARN] LLM init failed: {e}")
+
         while self._is_running:
             try:
                 item = await self.task_queue._queue.get()
@@ -672,13 +682,76 @@ class MultiUserEngine:
                 )
 
                 try:
-                    # 简单 echo 执行，不加载完整 runtime
-                    msg = task.input_data.get("msg", "任务完成")
-                    task.result = {"output": msg}
-                    task.state = TaskState.COMPLETED
+                    task_type = task.input_data.get("type", "echo")
+                    
+                    if task_type == "llm_chat" and llm_client:
+                        # LLM 推理任务
+                        prompt = task.input_data.get("prompt", "")
+                        system = task.input_data.get("system", "你是一个有帮助的AI助手。")
+                        from myAgent.llm.client import Message
+                        messages = [
+                            Message("system", system),
+                            Message("user", prompt),
+                        ]
+                        response = llm_client.chat(messages=messages)
+                        task.result = {"output": response.content, "model": response.model}
+                        if response.usage:
+                            task.result["usage"] = response.usage
+                        task.state = TaskState.COMPLETED if response.finish_reason != "error" else TaskState.FAILED
+                        if task.state == TaskState.FAILED:
+                            task.error = response.content
+                    
+                    elif task_type == "execute_code":
+                        # 代码执行任务
+                        code = task.input_data.get("code", "")
+                        result = await self._execute_code(code)
+                        task.result = result
+                        task.state = TaskState.COMPLETED
+                    
+                    elif task_type == "http_request":
+                        # HTTP 请求任务
+                        method = task.input_data.get("method", "GET").upper()
+                        url = task.input_data.get("url", "")
+                        headers = task.input_data.get("headers", {})
+                        body = task.input_data.get("body", None)
+                        result = await self._http_request(method, url, headers, body)
+                        task.result = result
+                        task.state = TaskState.COMPLETED
+                    
+                    elif task_type == "dag":
+                        # DAG 多步骤任务
+                        result = await self._execute_dag(task)
+                        task.result = result
+                        task.state = TaskState.COMPLETED
+                    
+                    else:
+                        # 默认 echo
+                        msg = task.input_data.get("msg", "任务完成")
+                        task.result = {"output": msg}
+                        task.state = TaskState.COMPLETED
+                        
                 except Exception as e:
                     task.state = TaskState.FAILED
                     task.error = str(e)
+
+                # Skill 自动触发：检查任务描述是否匹配已注册的技能
+                skill_triggered = False
+                if task_type != "dag" and not task.error:
+                    try:
+                        task_desc = task.task_name + " " + json.dumps(task.input_data, ensure_ascii=False)
+                        from myAgent.skills import SkillManager
+                        sm = SkillManager()
+                        sm.discover()
+                        best = sm.find_best_match(task_desc)
+                        if best:
+                            skill_name, config, confidence = best
+                            if config.enabled and confidence >= config.trigger.min_confidence:
+                                print(f"   🎯 Skill 自动触发: {config.display_name} (confidence={confidence:.2f})")
+                                skill_result = await sm.run_skill(skill_name, task_input=task.input_data)
+                                task.result = skill_result
+                                skill_triggered = True
+                    except Exception as se:
+                        print(f"   [WARN] Skill trigger failed: {se}")
 
                 task.completed_at = datetime.now()
                 self.db.update_task(
@@ -696,6 +769,106 @@ class MultiUserEngine:
                 break
             except Exception as e:
                 print(f"❌ Worker {worker_id} 错误: {e}")
+
+    async def _execute_code(self, code: str) -> Dict:
+        """安全地执行 Python 代码（沙箱模式）"""
+        import io
+        import contextlib
+        
+        try:
+            # 限制代码长度
+            if len(code) > 5000:
+                return {"error": "代码过长（最大 5000 字符）"}
+            
+            # 捕获 stdout
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                exec(code, {"__builtins__": {"print": print, "len": len, "range": range, "str": str, "int": int, "float": float, "list": list, "dict": dict, "tuple": tuple, "set": set, "sum": sum, "max": max, "min": min, "abs": abs, "round": round, "sorted": sorted, "reversed": reversed, "enumerate": enumerate, "zip": zip, "map": map, "filter": filter, "isinstance": isinstance, "type": type, "bool": bool, "chr": chr, "ord": ord, "hex": hex, "oct": oct, "pow": pow, "divmod": divmod}})
+            
+            return {"output": output.getvalue(), "status": "success"}
+        except Exception as e:
+            return {"error": str(e), "status": "failed"}
+
+    async def _http_request(self, method: str, url: str, headers: Dict, body: Any) -> Dict:
+        """发起 HTTP 请求"""
+        import httpx
+        
+        try:
+            if not url:
+                return {"error": "URL 不能为空"}
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                kwargs = {"headers": headers}
+                if body and isinstance(body, dict):
+                    kwargs["json"] = body
+                elif body:
+                    kwargs["data"] = body
+                
+                response = await client.request(method, url, **kwargs)
+                return {
+                    "status_code": response.status_code,
+                    "headers": dict(response.headers),
+                    "body": response.text[:10000],  # 限制响应体大小
+                }
+        except Exception as e:
+            return {"error": str(e)}
+
+    async def _execute_dag(self, task: QueuedTask) -> Dict:
+        """执行 DAG 多步骤任务"""
+        from myAgent.core.dag import DAG, DAGNode, DAGScheduler
+        
+        dag_config = task.input_data.get("dag", {})
+        nodes_cfg = dag_config.get("nodes", [])
+        
+        if not nodes_cfg:
+            return {"error": "DAG 配置为空"}
+        
+        # 构建 DAG
+        dag = DAG(name=task.task_name)
+        for nc in nodes_cfg:
+            node = DAGNode(
+                id=nc.get("id", ""),
+                name=nc.get("name", ""),
+                node_type=nc.get("type", "task"),
+                input_data=nc.get("input", {}),
+            )
+            dag.add_node(node)
+        
+        # 添加边
+        for nc in nodes_cfg:
+            for dep in nc.get("depends_on", []):
+                try:
+                    dag.add_edge(dep, nc["id"])
+                except ValueError:
+                    pass
+        
+        if dag.has_cycle():
+            return {"error": "DAG 包含环"}
+        
+        # 创建简易执行器
+        async def default_executor(node, input_data):
+            # 根据 node_type 执行不同类型
+            nt = node.node_type
+            inp = input_data or {}
+            if nt == "llm":
+                from myAgent.llm.client import LLMClient
+                client = LLMClient(self.llm_config)
+                resp = client.chat(prompt=inp.get("prompt", ""))
+                return {"output": resp.content}
+            elif nt == "compute":
+                return {"result": inp.get("value", 0) * 2}
+            else:
+                return {"output": str(inp)}
+        
+        scheduler = DAGScheduler(dag, max_parallel=2)
+        scheduler.register_node_executor("default", default_executor)
+        
+        # 为每个节点注册执行器
+        for nc in nodes_cfg:
+            scheduler.register_node_executor(nc["id"], default_executor)
+        
+        results = await scheduler.run()
+        return {"results": results, "node_count": dag.node_count}
 
     async def start(self):
         if self._is_running:

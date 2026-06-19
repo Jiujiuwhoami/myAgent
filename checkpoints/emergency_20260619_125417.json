@@ -1,0 +1,40 @@
+{
+  "type": "emergency",
+  "timestamp": "20260619_125417",
+  "interrupt_count": 1,
+  "state": {
+    "tasks": {
+      "d6635f7c-5889-4a55-819c-2a4ff2000bdd": {
+        "id": "89417dc9",
+        "name": "Task-d6635f7c",
+        "status": "pending",
+        "input_data": {
+          "msg": "admin"
+        },
+        "output_data": null,
+        "error": null,
+        "retry_count": 0,
+        "max_retries": 3,
+        "created_at": "2026-06-19T12:51:01.758888",
+        "started_at": null,
+        "completed_at": null,
+        "context": {},
+        "metadata": {}
+      }
+    },
+    "memory": {
+      "working_memory": {
+        "size": 0,
+        "max": 10
+      },
+      "episodic_memory": {
+        "count": 0,
+        "max": 100
+      },
+      "semantic_memory": {
+        "count": 0
+      }
+    },
+    "timestamp": "2026-06-19T12:54:17.511453"
+  }
+}

@@ -2,6 +2,7 @@
 DAG (有向无环图) 和调度器
 """
 
+import asyncio
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
@@ -25,6 +26,9 @@ class DAGNode:
     def __post_init__(self):
         if not self.name:
             self.name = f"node_{self.id}"
+        # 如果 id 是短字符串（来自配置），不要替换为随机ID
+        if self.id and len(self.id) <= 8 and self.id.replace("_", "").isalnum():
+            pass  # 使用配置的ID
 
     def is_ready(self, completed_nodes: Set[str]) -> bool:
         """检查节点是否可执行"""
@@ -163,7 +167,8 @@ class DAGScheduler:
         """执行整个 DAG"""
         completed_nodes: Set[str] = set()
         all_results: Dict[str, Dict] = {}
-        errors: list[str] = []
+        errors: List[str] = []
+        node_outputs: Dict[str, Dict] = {}
 
         print(f"\n🚀 开始执行 DAG: {self.dag.name}")
         print(f"   节点数: {self.dag.node_count}")
@@ -182,19 +187,27 @@ class DAGScheduler:
 
             print(f"\n   第 {round_num} 轮: 执行 {len(ready_nodes)} 个节点")
 
-            # 执行这一轮的节点
-            for node in ready_nodes:
+            # 并发执行这一轮的节点
+            async def exec_node(node: DAGNode) -> None:
                 node.status = NodeStatus.RUNNING
                 print(f"      📌 {node.name}")
 
                 try:
+                    # 注入上游节点的输出作为输入
+                    merged_input = dict(node.input_data)
+                    for dep_id in node.dependencies:
+                        if dep_id in node_outputs:
+                            merged_input[f"dep_{dep_id}"] = node_outputs[dep_id]
+
                     executor = self._node_executors.get(node.id)
                     if executor:
-                        result = await executor(node)
+                        result = await executor(node, merged_input)
                         node.output_data = result
+                        node_outputs[node.id] = result
                         all_results[node.id] = {"success": True, "output_data": result}
                     else:
                         node.output_data = {"message": "no executor registered"}
+                        node_outputs[node.id] = node.output_data
                         all_results[node.id] = {"success": True, "output_data": node.output_data}
 
                     node.status = NodeStatus.COMPLETED
@@ -205,7 +218,16 @@ class DAGScheduler:
                     errors.append(f"{node.name}: {str(e)}")
                     all_results[node.id] = {"success": False, "error": str(e)}
 
-        len(errors) == 0
-        print(f"\n✅ DAG 执行完成: {len(completed_nodes)}/{self.dag.node_count} 节点成功")
+            # 并发执行，限制并行度
+            tasks = [exec_node(n) for n in ready_nodes]
+            for i in range(0, len(tasks), self.max_parallel):
+                batch = tasks[i:i+self.max_parallel]
+                await asyncio.gather(*batch, return_exceptions=True)
+
+        success = len(errors) == 0
+        print(f"\n{'✅' if success else '⚠️'} DAG 执行完成: {len(completed_nodes)}/{self.dag.node_count} 节点成功")
+        if errors:
+            for e in errors:
+                print(f"   ❌ {e}")
 
         return all_results
