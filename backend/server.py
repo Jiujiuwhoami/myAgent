@@ -291,4 +291,75 @@ def create_app(engine: MultiUserEngine) -> FastAPI:
         """健康检查"""
         return {"status": "ok", "version": "2.1.0"}
 
+    # ========== RAG API ==========
+
+    class DocumentUpload(BaseModel):
+        title: str = Field(..., min_length=1, max_length=256)
+        content: str = Field(..., min_length=1)
+
+    @app.post("/api/v1/rag/upload")
+    async def upload_document(
+        payload: DocumentUpload,
+        token: str = Header(..., alias="X-Token"),
+        engine: MultiUserEngine = Depends(get_engine),
+    ):
+        """上传文档到 RAG 知识库"""
+        user = engine.get_current_user_from_token(token)
+        if not user:
+            raise HTTPException(status_code=401, detail="无效的认证 token")
+        
+        if not engine.rag_store:
+            raise HTTPException(status_code=503, detail="RAG 服务未启用")
+        
+        # 切分文档（按段落）
+        from myAgent.backend.rag_store import DocumentChunk
+        paragraphs = [p.strip() for p in payload.content.split("\n\n") if p.strip()]
+        chunks = [
+            DocumentChunk(
+                user_id=user.id,
+                doc_title=payload.title,
+                content=p,
+                metadata={"source": "upload"},
+            ) for p in paragraphs
+        ]
+        
+        count = engine.rag_store.insert_documents(chunks)
+        return {"status": "uploaded", "chunks": count, "title": payload.title}
+
+    @app.post("/api/v1/rag/search")
+    async def search_rag(
+        payload: Dict[str, Any],
+        token: str = Header(..., alias="X-Token"),
+        engine: MultiUserEngine = Depends(get_engine),
+    ):
+        """搜索 RAG 知识库"""
+        user = engine.get_current_user_from_token(token)
+        if not user:
+            raise HTTPException(status_code=401, detail="无效的认证 token")
+        
+        if not engine.rag_store:
+            raise HTTPException(status_code=503, detail="RAG 服务未启用")
+        
+        query = payload.get("query", "")
+        top_k = payload.get("top_k", 3)
+        
+        results = engine.rag_store.search(query=query, user_id=user.id, top_k=top_k)
+        return {"results": results, "count": len(results)}
+
+    @app.get("/api/v1/rag/stats")
+    async def rag_stats(
+        token: str = Header(..., alias="X-Token"),
+        engine: MultiUserEngine = Depends(get_engine),
+    ):
+        """获取 RAG 统计信息"""
+        user = engine.get_current_user_from_token(token)
+        if not user:
+            raise HTTPException(status_code=401, detail="无效的认证 token")
+        
+        if not engine.rag_store:
+            raise HTTPException(status_code=503, detail="RAG 服务未启用")
+        
+        stats = engine.rag_store.get_stats()
+        return stats
+
     return app

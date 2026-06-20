@@ -42,11 +42,21 @@ def create_engine():
 
     llm_config = LLMConfig.from_env()
 
+    # RAG 配置
+    rag_config = {}
+    if os.getenv("RAG_ENABLED", "false").lower() == "true":
+        rag_config = {
+            "enabled": True,
+            "uri": os.getenv("RAG_ZILLIZ_URI", ""),
+            "token": os.getenv("RAG_ZILLIZ_TOKEN", ""),
+        }
+
     engine = MultiUserEngine(
         db_path=db_path,
         max_workers=max_workers,
         llm_config=llm_config,
         jwt_secret_key=jwt_secret,
+        rag_config=rag_config if rag_config else None,
     )
 
     return engine

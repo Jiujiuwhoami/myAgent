@@ -473,12 +473,24 @@ class MultiUserEngine:
         max_workers: int = 4,
         llm_config: Optional[Any] = None,
         jwt_secret_key: Optional[str] = None,
+        rag_config: Optional[Dict] = None,
     ):
         self.db = Database(db_path)
         self.task_queue = TaskQueue(max_workers)
         self.llm_config = llm_config
         self.jwt_secret_key = jwt_secret_key or JWT_SECRET_KEY
-
+        self.rag_config = rag_config or {}
+        self.rag_store = None
+        if self.rag_config.get("enabled", False):
+            try:
+                from myAgent.backend.rag_store import RAGStore
+                self.rag_store = RAGStore(
+                    zilliz_uri=self.rag_config["uri"],
+                    zilliz_token=self.rag_config["token"],
+                )
+                print(f"   [OK] RAG enabled: Zilliz connected")
+            except Exception as e:
+                print(f"   [WARN] RAG init failed: {e}")
         self._user_runtimes: Dict[str, UserRuntime] = {}
         self._worker_tasks: List[asyncio.Task] = []
         self._is_running = False
@@ -685,12 +697,31 @@ class MultiUserEngine:
                     task_type = task.input_data.get("type", "echo")
                     
                     if task_type == "llm_chat" and llm_client:
-                        # LLM 推理任务
+                        # LLM 推理任务（RAG 增强）
                         prompt = task.input_data.get("prompt", "")
                         system = task.input_data.get("system", "你是一个有帮助的AI助手。")
                         from myAgent.llm.client import Message
+                        
+                        # RAG 检索增强
+                        rag_context = ""
+                        if self.rag_store and prompt:
+                            try:
+                                results = self.rag_store.search(
+                                    query=prompt,
+                                    user_id=task.user_id,
+                                    top_k=3,
+                                )
+                                if results:
+                                    rag_docs = "\n\n--- 参考知识 ---\n" + "\n".join(
+                                        f"[{i+1}] {r['content'][:500]}" for i, r in enumerate(results)
+                                    )
+                                    rag_context = rag_docs
+                                    task.result = {"rag_hits": len(results)}
+                            except Exception:
+                                pass  # RAG 失败不影响 LLM 调用
+                        
                         messages = [
-                            Message("system", system),
+                            Message("system", system + rag_context),
                             Message("user", prompt),
                         ]
                         response = llm_client.chat(messages=messages)
@@ -736,7 +767,8 @@ class MultiUserEngine:
 
                 # Skill 自动触发：检查任务描述是否匹配已注册的技能
                 skill_triggered = False
-                if task_type != "dag" and not task.error:
+                # 只对 echo 类型的任务触发 Skill，避免覆盖 LLM/代码/HTTP 任务的结果
+                if task_type == "echo" and not task.error:
                     try:
                         task_desc = task.task_name + " " + json.dumps(task.input_data, ensure_ascii=False)
                         from myAgent.skills import SkillManager
