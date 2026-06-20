@@ -5,6 +5,7 @@
 """
 
 from typing import Any, Dict, List, Optional
+import asyncio
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -312,7 +313,7 @@ def create_app(engine: MultiUserEngine) -> FastAPI:
             raise HTTPException(status_code=503, detail="RAG 服务未启用")
         
         # 切分文档（按段落）
-        from myAgent.backend.rag_store import DocumentChunk
+        from backend.rag_store import DocumentChunk
         paragraphs = [p.strip() for p in payload.content.split("\n\n") if p.strip()]
         chunks = [
             DocumentChunk(
@@ -376,33 +377,21 @@ def create_app(engine: MultiUserEngine) -> FastAPI:
         if not engine.rag_store:
             raise HTTPException(status_code=503, detail="RAG 服务未启用")
         
-        # 直接删除 Collection（不检查是否存在）
-        try:
-            from pymilvus import MilvusClient
-            client = MilvusClient(
-                uri=engine.rag_store.zilliz_uri,
-                token=engine.rag_store.zilliz_token,
-                timeout=10,
-            )
-            if client.has_collection(engine.rag_store.COLLECTION_NAME):
-                client.drop_collection(engine.rag_store.COLLECTION_NAME)
-        except Exception as e:
-            # Collection 不存在或连接失败，忽略
-            pass
+        rag_store = engine.rag_store
         
         # 更新 Embedding 配置
         embed_config = (payload or {}).get("embed_config", {})
         if embed_config:
             from backend.rag_store import EmbeddingClient
-            engine.rag_store.embed_client = EmbeddingClient(
+            rag_store.embed_client = EmbeddingClient(
                 model=embed_config.get("model", "tf-idf"),
                 base_url=embed_config.get("base_url", ""),
                 api_key=embed_config.get("api_key", ""),
                 dimension=embed_config.get("dimension", 1536),
             )
         
-        # 重新创建 Collection
-        engine.rag_store._ensure_collection()
+        # 标记 Collection 需要重建（下次操作时自动重建）
+        rag_store._need_rebuild = True
         
         return {
             "status": "rebuilt",

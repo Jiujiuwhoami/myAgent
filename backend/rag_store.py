@@ -160,6 +160,7 @@ class RAGStore:
         self.zilliz_uri = zilliz_uri
         self.zilliz_token = zilliz_token
         self.embed_client = embed_client or EmbeddingClient()
+        self._need_rebuild = False
 
         # 使用 MilvusClient 新 API（设置超时避免阻塞）
         from pymilvus import MilvusClient
@@ -169,8 +170,6 @@ class RAGStore:
                 token=zilliz_token,
                 timeout=5,
             )
-            # 测试连接
-            self.client.heartbeat()
         except Exception as e:
             print(f"[WARN] Zilliz 连接失败: {e}，RAG 将不可用")
             self.client = None
@@ -181,7 +180,12 @@ class RAGStore:
     def _ensure_collection(self):
         """确保 Collection 存在"""
         if not self.client:
-            return  # 连接失败，跳过
+            return
+        if self._need_rebuild:
+            # 重建：直接标记，下次 insert 时再处理
+            self._need_rebuild = False
+            # 不立即 drop，避免阻塞
+        
         dim = self.embed_client.dimension
 
         if self.client.has_collection(self.COLLECTION_NAME):
@@ -224,6 +228,9 @@ class RAGStore:
         """插入文档片段（自动生成 Embedding）"""
         if not self.client:
             raise RuntimeError("RAG 连接未就绪")
+        # 如果需要重建，先重建 Collection
+        if self._need_rebuild:
+            self._ensure_collection()
         if not chunks:
             return 0
 
