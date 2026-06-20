@@ -6,6 +6,7 @@
 
 from typing import Any, Dict, List, Optional
 import asyncio
+import json
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -473,6 +474,80 @@ def create_app(engine: MultiUserEngine) -> FastAPI:
             model=response.model,
             rag_used=rag_used,
             rag_hits=rag_hits,
+        )
+
+    @app.post("/api/v1/chat/stream")
+    async def chat_stream(
+        req_body: ChatRequest,
+        token: str = Header(..., alias="X-Token"),
+        engine: MultiUserEngine = Depends(get_engine),
+    ):
+        """流式聊天接口（SSE）
+        
+        逐字返回 LLM 输出，类似 ChatGPT 打字效果。
+        """
+        from fastapi.responses import StreamingResponse
+        
+        user = engine.get_current_user_from_token(token)
+        if not user:
+            raise HTTPException(status_code=401, detail="无效的认证 token")
+        
+        if not engine.llm_config:
+            raise HTTPException(status_code=503, detail="LLM 服务未配置")
+        
+        try:
+            from myAgent.llm.client import LLMClient, Message
+            llm_client = LLMClient(engine.llm_config)
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"LLM 初始化失败: {e}")
+        
+        # RAG 检索增强
+        rag_context = ""
+        if req_body.rag and engine.rag_store:
+            try:
+                results = engine.rag_store.search(
+                    query=req_body.message,
+                    user_id=user.id,
+                    top_k=3,
+                )
+                if results:
+                    rag_docs = "\n\n--- 参考知识 ---\n" + "\n".join(
+                        f"[{i+1}] {r['content'][:500]}" for i, r in enumerate(results)
+                    )
+                    rag_context = rag_docs
+            except Exception:
+                pass
+        
+        system_prompt = req_body.system + rag_context
+        messages = [
+            Message("system", system_prompt),
+            Message("user", req_body.message),
+        ]
+        
+        async def event_generator():
+            # 先发送元数据
+            yield f"data: {{\"type\": \"start\", \"model\": \"{llm_client.config.model}\"}}\n\n"
+            
+            try:
+                # 调用 LLM（非流式，拿到完整回复后逐字发送）
+                response = llm_client.chat(messages=messages)
+                reply = response.content
+                
+                # 逐字 chunk 发送（模拟流式）
+                for i in range(0, len(reply), 10):
+                    chunk = reply[i:i+10]
+                    yield f"data: {{\"type\": \"chunk\", \"text\": {json.dumps(chunk, ensure_ascii=False)}}}\n\n"
+                    await asyncio.sleep(0.01)
+                
+                # 结束
+                yield f"data: {{\"type\": \"done\"}}\n\n"
+            except Exception as e:
+                yield f"data: {{\"type\": \"error\", \"message\": \"{str(e)}\"}}\n\n"
+        
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
         )
 
     return app
