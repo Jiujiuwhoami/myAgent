@@ -398,4 +398,81 @@ def create_app(engine: MultiUserEngine) -> FastAPI:
             "message": "知识库已重建，请重新上传文档",
         }
 
+    # ========== 聊天接口（Manus 风格）==========
+
+    class ChatRequest(BaseModel):
+        message: str = Field(..., min_length=1, description="用户消息")
+        system: Optional[str] = Field("你是一个有帮助的AI助手。", description="系统提示词")
+        rag: bool = Field(True, description="是否启用知识库检索增强")
+        model: Optional[str] = Field(None, description="指定模型（可选）")
+
+    class ChatResponse(BaseModel):
+        reply: str
+        model: str
+        rag_used: bool = False
+        rag_hits: int = 0
+
+    @app.post("/api/v1/chat", response_model=ChatResponse)
+    async def chat(
+        req_body: ChatRequest,
+        token: str = Header(..., alias="X-Token"),
+        engine: MultiUserEngine = Depends(get_engine),
+    ):
+        """同步聊天接口（Manus 风格）
+        
+        直接调用 LLM 返回即时回复，不经过任务队列。
+        自动检索知识库增强回答（如果启用 RAG）。
+        """
+        user = engine.get_current_user_from_token(token)
+        if not user:
+            raise HTTPException(status_code=401, detail="无效的认证 token")
+        
+        # 初始化 LLM client（复用 engine 的 llm_config）
+        if not engine.llm_config:
+            raise HTTPException(status_code=503, detail="LLM 服务未配置")
+        
+        try:
+            from myAgent.llm.client import LLMClient, Message
+            llm_client = LLMClient(engine.llm_config)
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"LLM 初始化失败: {e}")
+        
+        # RAG 检索增强
+        rag_context = ""
+        rag_used = False
+        rag_hits = 0
+        if req_body.rag and engine.rag_store:
+            try:
+                results = engine.rag_store.search(
+                    query=req_body.message,
+                    user_id=user.id,
+                    top_k=3,
+                )
+                if results:
+                    rag_docs = "\n\n--- 参考知识 ---\n" + "\n".join(
+                        f"[{i+1}] {r['content'][:500]}" for i, r in enumerate(results)
+                    )
+                    rag_context = rag_docs
+                    rag_used = True
+                    rag_hits = len(results)
+            except Exception:
+                pass  # RAG 失败不影响聊天
+        
+        # 构建消息
+        system_prompt = req_body.system + rag_context
+        messages = [
+            Message("system", system_prompt),
+            Message("user", req_body.message),
+        ]
+        
+        # 调用 LLM
+        response = llm_client.chat(messages=messages)
+        
+        return ChatResponse(
+            reply=response.content,
+            model=response.model,
+            rag_used=rag_used,
+            rag_hits=rag_hits,
+        )
+
     return app
