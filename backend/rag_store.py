@@ -161,15 +161,27 @@ class RAGStore:
         self.zilliz_token = zilliz_token
         self.embed_client = embed_client or EmbeddingClient()
 
-        # 使用 MilvusClient 新 API
+        # 使用 MilvusClient 新 API（设置超时避免阻塞）
         from pymilvus import MilvusClient
-        self.client = MilvusClient(uri=zilliz_uri, token=zilliz_token)
+        try:
+            self.client = MilvusClient(
+                uri=zilliz_uri,
+                token=zilliz_token,
+                timeout=5,
+            )
+            # 测试连接
+            self.client.heartbeat()
+        except Exception as e:
+            print(f"[WARN] Zilliz 连接失败: {e}，RAG 将不可用")
+            self.client = None
 
         # 创建或加载 Collection
         self._ensure_collection()
 
     def _ensure_collection(self):
         """确保 Collection 存在"""
+        if not self.client:
+            return  # 连接失败，跳过
         dim = self.embed_client.dimension
 
         if self.client.has_collection(self.COLLECTION_NAME):
@@ -178,21 +190,19 @@ class RAGStore:
             return
 
         # 定义 Schema
-        fields = [
-            {"name": "id", "dtype": "varchar", "max_length": 64, "is_primary": True},
-            {"name": "user_id", "dtype": "varchar", "max_length": 64},
-            {"name": "doc_title", "dtype": "varchar", "max_length": 256},
-            {"name": "content", "dtype": "varchar", "max_length": 4096},
-            {"name": "metadata", "dtype": "varchar", "max_length": 8192},
-            {"name": "created_at", "dtype": "varchar", "max_length": 64},
-            {"name": "vector", "dtype": "float_vector", "dim": dim},
-        ]
         schema = self.client.create_schema(
             enable_dynamic_field=False,
             description="RAG 文档向量存储",
         )
-        for field in fields:
-            schema.add_field(**field)
+        # 添加字段（pymilvus 3.0 需要 field_name + datatype）
+        from pymilvus import DataType
+        schema.add_field(field_name="id", datatype=DataType.VARCHAR, max_length=64, is_primary=True)
+        schema.add_field(field_name="user_id", datatype=DataType.VARCHAR, max_length=64)
+        schema.add_field(field_name="doc_title", datatype=DataType.VARCHAR, max_length=256)
+        schema.add_field(field_name="content", datatype=DataType.VARCHAR, max_length=4096)
+        schema.add_field(field_name="metadata", datatype=DataType.VARCHAR, max_length=8192)
+        schema.add_field(field_name="created_at", datatype=DataType.VARCHAR, max_length=64)
+        schema.add_field(field_name="vector", datatype=DataType.FLOAT_VECTOR, dim=dim)
 
         # 创建索引参数
         index_params = self.client.prepare_index_params()
@@ -212,6 +222,8 @@ class RAGStore:
 
     def insert_documents(self, chunks: List[DocumentChunk]) -> int:
         """插入文档片段（自动生成 Embedding）"""
+        if not self.client:
+            raise RuntimeError("RAG 连接未就绪")
         if not chunks:
             return 0
 
@@ -245,6 +257,7 @@ class RAGStore:
         self.client.insert(
             collection_name=self.COLLECTION_NAME,
             data=data,
+            timeout=10,
         )
         return len(chunks)
 
@@ -256,6 +269,8 @@ class RAGStore:
         doc_title: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """语义搜索"""
+        if not self.client:
+            return []
         # 生成查询向量
         query_vec = self.embed_client.embed([query])[0]
 
@@ -272,6 +287,7 @@ class RAGStore:
             filter=expr,
             output_fields=["content", "doc_title", "metadata", "created_at"],
             search_params={"metric_type": "IP", "params": {"ef": 10}},
+            timeout=10,
         )
 
         # 格式化结果

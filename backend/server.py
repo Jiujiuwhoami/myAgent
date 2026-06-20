@@ -362,4 +362,51 @@ def create_app(engine: MultiUserEngine) -> FastAPI:
         stats = engine.rag_store.get_stats()
         return stats
 
+    @app.post("/api/v1/rag/rebuild")
+    async def rebuild_rag(
+        payload: Optional[Dict[str, Any]] = None,
+        token: str = Header(..., alias="X-Token"),
+        engine: MultiUserEngine = Depends(get_engine),
+    ):
+        """重建知识库（删除旧 Collection 并用新模型重新索引）"""
+        user = engine.get_current_user_from_token(token)
+        if not user:
+            raise HTTPException(status_code=401, detail="无效的认证 token")
+        
+        if not engine.rag_store:
+            raise HTTPException(status_code=503, detail="RAG 服务未启用")
+        
+        # 直接删除 Collection（不检查是否存在）
+        try:
+            from pymilvus import MilvusClient
+            client = MilvusClient(
+                uri=engine.rag_store.zilliz_uri,
+                token=engine.rag_store.zilliz_token,
+                timeout=10,
+            )
+            if client.has_collection(engine.rag_store.COLLECTION_NAME):
+                client.drop_collection(engine.rag_store.COLLECTION_NAME)
+        except Exception as e:
+            # Collection 不存在或连接失败，忽略
+            pass
+        
+        # 更新 Embedding 配置
+        embed_config = (payload or {}).get("embed_config", {})
+        if embed_config:
+            from backend.rag_store import EmbeddingClient
+            engine.rag_store.embed_client = EmbeddingClient(
+                model=embed_config.get("model", "tf-idf"),
+                base_url=embed_config.get("base_url", ""),
+                api_key=embed_config.get("api_key", ""),
+                dimension=embed_config.get("dimension", 1536),
+            )
+        
+        # 重新创建 Collection
+        engine.rag_store._ensure_collection()
+        
+        return {
+            "status": "rebuilt",
+            "message": "知识库已重建，请重新上传文档",
+        }
+
     return app

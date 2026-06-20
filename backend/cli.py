@@ -20,7 +20,8 @@ import sys
 # 自动加载 .env 文件
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    # 确保加载项目根目录的 .env
+    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '.env'))
 except ImportError:
     pass  # python-dotenv 未安装则跳过
 
