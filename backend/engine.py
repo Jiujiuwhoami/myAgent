@@ -209,6 +209,31 @@ class Database:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_user ON tasks(user_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_state ON tasks(state)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)")
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS conversations (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    title TEXT DEFAULT '',
+                    created_at TEXT,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS messages (
+                    id TEXT PRIMARY KEY,
+                    conversation_id TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at TEXT,
+                    FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+                )
+            """
+            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(user_id)")
             conn.commit()
 
     def create_user(
@@ -390,6 +415,56 @@ class Database:
                 )
                 for row in rows
             ]
+
+    # ========== 会话管理 ==========
+
+    def create_conversation(self, user_id: str, title: str = "") -> Dict:
+        conv_id = str(uuid.uuid4())
+        with self._get_connection() as conn:
+            conn.execute(
+                "INSERT INTO conversations VALUES (?, ?, ?, ?)",
+                (conv_id, user_id, title, datetime.now().isoformat()),
+            )
+            conn.commit()
+        return {"id": conv_id, "user_id": user_id, "title": title, "created_at": datetime.now().isoformat()}
+
+    def get_conversations(self, user_id: str, limit: int = 50) -> List[Dict]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM conversations WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+                (user_id, limit),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_messages(self, conversation_id: str, limit: int = 50) -> List[Dict]:
+        with self._get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC LIMIT ?",
+                (conversation_id, limit),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def add_message(self, conversation_id: str, role: str, content: str) -> str:
+        msg_id = str(uuid.uuid4())
+        with self._get_connection() as conn:
+            conn.execute(
+                "INSERT INTO messages VALUES (?, ?, ?, ?, ?)",
+                (msg_id, conversation_id, role, content, datetime.now().isoformat()),
+            )
+            conn.commit()
+        return msg_id
+
+    def delete_conversation(self, conversation_id: str, user_id: str) -> bool:
+        with self._get_connection() as conn:
+            row = conn.execute(
+                "SELECT user_id FROM conversations WHERE id = ?", (conversation_id,)
+            ).fetchone()
+            if not row or row["user_id"] != user_id:
+                return False
+            conn.execute("DELETE FROM messages WHERE conversation_id = ?", (conversation_id,))
+            conn.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
+            conn.commit()
+            return True
 
 
 class UserRuntime:

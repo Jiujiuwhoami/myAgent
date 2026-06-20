@@ -403,9 +403,10 @@ def create_app(engine: MultiUserEngine) -> FastAPI:
 
     class ChatRequest(BaseModel):
         message: str = Field(..., min_length=1, description="用户消息")
-        system: Optional[str] = Field("你是一个有帮助的AI助手。", description="系统提示词")
+        system: str = Field("你是一个有帮助的AI助手。", description="系统提示词")
         rag: bool = Field(True, description="是否启用知识库检索增强")
         model: Optional[str] = Field(None, description="指定模型（可选）")
+        conversation_id: Optional[str] = Field(None, description="会话ID（用于多轮对话）")
 
     class ChatResponse(BaseModel):
         reply: str
@@ -548,6 +549,157 @@ def create_app(engine: MultiUserEngine) -> FastAPI:
             event_generator(),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+        )
+
+    # ========== 会话管理接口 ==========
+
+    class ConversationCreate(BaseModel):
+        title: Optional[str] = ""
+
+    @app.post("/api/v1/conversations")
+    async def create_conversation(
+        payload: ConversationCreate,
+        token: str = Header(..., alias="X-Token"),
+        engine: MultiUserEngine = Depends(get_engine),
+    ):
+        """创建新会话"""
+        user = engine.get_current_user_from_token(token)
+        if not user:
+            raise HTTPException(status_code=401, detail="无效的认证 token")
+        conv = engine.db.create_conversation(user.id, payload.title or "新对话")
+        return conv
+
+    @app.get("/api/v1/conversations")
+    async def list_conversations(
+        token: str = Header(..., alias="X-Token"),
+        engine: MultiUserEngine = Depends(get_engine),
+    ):
+        """列出用户的所有会话"""
+        user = engine.get_current_user_from_token(token)
+        if not user:
+            raise HTTPException(status_code=401, detail="无效的认证 token")
+        return engine.db.get_conversations(user.id)
+
+    @app.get("/api/v1/conversations/{conv_id}/messages")
+    async def get_messages(
+        conv_id: str,
+        token: str = Header(..., alias="X-Token"),
+        engine: MultiUserEngine = Depends(get_engine),
+    ):
+        """获取会话消息历史"""
+        user = engine.get_current_user_from_token(token)
+        if not user:
+            raise HTTPException(status_code=401, detail="无效的认证 token")
+        msgs = engine.db.get_messages(conv_id)
+        # 权限校验
+        conv_row = engine.db._get_connection().execute(
+            "SELECT user_id FROM conversations WHERE id = ?", (conv_id,)
+        ).fetchone()
+        if conv_row and conv_row["user_id"] != user.id:
+            raise HTTPException(status_code=403, detail="无权访问此会话")
+        return msgs
+
+    @app.delete("/api/v1/conversations/{conv_id}")
+    async def delete_conversation(
+        conv_id: str,
+        token: str = Header(..., alias="X-Token"),
+        engine: MultiUserEngine = Depends(get_engine),
+    ):
+        """删除会话"""
+        user = engine.get_current_user_from_token(token)
+        if not user:
+            raise HTTPException(status_code=401, detail="无效的认证 token")
+        ok = engine.db.delete_conversation(conv_id, user.id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="会话不存在或无权删除")
+        return {"message": "已删除"}
+
+    # ========== 带历史的聊天接口 ==========
+
+    @app.post("/api/v1/chat/session")
+    async def chat_session(
+        req_body: ChatRequest,
+        token: str = Header(..., alias="X-Token"),
+        engine: MultiUserEngine = Depends(get_engine),
+    ):
+        """带会话历史的聊天（自动维护对话上下文）
+        
+        支持 conversation_id 参数延续历史对话。
+        不传则自动创建新会话。
+        """
+        user = engine.get_current_user_from_token(token)
+        if not user:
+            raise HTTPException(status_code=401, detail="无效的认证 token")
+        
+        if not engine.llm_config:
+            raise HTTPException(status_code=503, detail="LLM 服务未配置")
+        
+        try:
+            from myAgent.llm.client import LLMClient, Message
+            llm_client = LLMClient(engine.llm_config)
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"LLM 初始化失败: {e}")
+        
+        # RAG 检索
+        rag_context = ""
+        rag_used = False
+        rag_hits = 0
+        if req_body.rag and engine.rag_store:
+            try:
+                results = engine.rag_store.search(
+                    query=req_body.message,
+                    user_id=user.id,
+                    top_k=3,
+                )
+                if results:
+                    rag_docs = "\n\n--- 参考知识 ---\n" + "\n".join(
+                        f"[{i+1}] {r['content'][:500]}" for i, r in enumerate(results)
+                    )
+                    rag_context = rag_docs
+                    rag_used = True
+                    rag_hits = len(results)
+            except Exception:
+                pass
+        
+        # 获取或创建会话
+        conv_id = req_body.conversation_id
+        if not conv_id:
+            conv = engine.db.create_conversation(user.id, req_body.message[:50])
+            conv_id = conv["id"]
+        else:
+            # 确保会话属于当前用户
+            with engine.db._get_connection() as conn:
+                row = conn.execute(
+                    "SELECT user_id FROM conversations WHERE id = ?", (conv_id,)
+                ).fetchone()
+                if not row or row["user_id"] != user.id:
+                    raise HTTPException(status_code=403, detail="无权访问此会话")
+        
+        # 构建消息历史
+        system_prompt = req_body.system + rag_context
+        messages = [Message("system", system_prompt)]
+        
+        # 加载最近 20 条历史消息
+        hist_msgs = engine.db.get_messages(conv_id, limit=20)
+        for m in hist_msgs:
+            messages.append(Message(m["role"], m["content"]))
+        
+        # 添加当前用户消息
+        messages.append(Message("user", req_body.message))
+        
+        # 调用 LLM
+        response = llm_client.chat(messages=messages)
+        reply = response.content
+        
+        # 保存历史
+        engine.db.add_message(conv_id, "user", req_body.message)
+        engine.db.add_message(conv_id, "assistant", reply)
+        
+        return ChatResponse(
+            reply=reply,
+            model=response.model,
+            rag_used=rag_used,
+            rag_hits=rag_hits,
         )
 
     return app
