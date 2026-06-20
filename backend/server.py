@@ -420,62 +420,48 @@ def create_app(engine: MultiUserEngine) -> FastAPI:
         token: str = Header(..., alias="X-Token"),
         engine: MultiUserEngine = Depends(get_engine),
     ):
-        """同步聊天接口（Manus 风格）
+        """同步聊天（基于任务队列，支持 RAG）
         
-        直接调用 LLM 返回即时回复，不经过任务队列。
-        自动检索知识库增强回答（如果启用 RAG）。
+        提交 llm_chat 任务后立即轮询结果，对外表现为同步接口。
         """
         user = engine.get_current_user_from_token(token)
         if not user:
             raise HTTPException(status_code=401, detail="无效的认证 token")
         
-        # 初始化 LLM client（复用 engine 的 llm_config）
-        if not engine.llm_config:
-            raise HTTPException(status_code=503, detail="LLM 服务未配置")
-        
-        try:
-            from myAgent.llm.client import LLMClient, Message
-            llm_client = LLMClient(engine.llm_config)
-        except Exception as e:
-            raise HTTPException(status_code=503, detail=f"LLM 初始化失败: {e}")
-        
-        # RAG 检索增强
-        rag_context = ""
-        rag_used = False
-        rag_hits = 0
-        if req_body.rag and engine.rag_store:
-            try:
-                results = engine.rag_store.search(
-                    query=req_body.message,
-                    user_id=user.id,
-                    top_k=3,
-                )
-                if results:
-                    rag_docs = "\n\n--- 参考知识 ---\n" + "\n".join(
-                        f"[{i+1}] {r['content'][:500]}" for i, r in enumerate(results)
-                    )
-                    rag_context = rag_docs
-                    rag_used = True
-                    rag_hits = len(results)
-            except Exception:
-                pass  # RAG 失败不影响聊天
-        
-        # 构建消息
-        system_prompt = req_body.system + rag_context
-        messages = [
-            Message("system", system_prompt),
-            Message("user", req_body.message),
-        ]
-        
-        # 调用 LLM
-        response = llm_client.chat(messages=messages)
-        
-        return ChatResponse(
-            reply=response.content,
-            model=response.model,
-            rag_used=rag_used,
-            rag_hits=rag_hits,
+        # 提交任务到队列
+        task_input: Dict[str, Any] = {
+            "type": "llm_chat",
+            "prompt": req_body.message,
+            "system": req_body.system,
+        }
+        if req_body.rag:
+            task_input["rag"] = True
+        task = await engine.submit_task(
+            user_id=user.id,
+            task_name="llm_chat",
+            input_data=task_input,
         )
+        
+        # 轮询等待结果（最多 60 秒）
+        import asyncio
+        for _ in range(60):
+            await asyncio.sleep(1)
+            task_info = await engine.get_task_status(task.id, user.id)
+            if task_info and task_info.state.value == "completed":
+                result = task_info.result or {}
+                output = result.get("output", "")
+                model = result.get("model", "unknown")
+                rag_hits = result.get("rag_hits", 0)
+                return ChatResponse(
+                    reply=output,
+                    model=model,
+                    rag_used=bool(rag_hits),
+                    rag_hits=rag_hits,
+                )
+            elif task_info and task_info.state.value == "failed":
+                raise HTTPException(status_code=500, detail=task_info.error or "任务失败")
+        
+        raise HTTPException(status_code=504, detail="LLM 响应超时")
 
     @app.post("/api/v1/chat/stream")
     async def chat_stream(
@@ -483,9 +469,9 @@ def create_app(engine: MultiUserEngine) -> FastAPI:
         token: str = Header(..., alias="X-Token"),
         engine: MultiUserEngine = Depends(get_engine),
     ):
-        """流式聊天接口（SSE）
+        """流式聊天（基于任务队列 + SSE）
         
-        逐字返回 LLM 输出，类似 ChatGPT 打字效果。
+        提交任务后轮询结果，通过 SSE 逐 chunk 推送。
         """
         from fastapi.responses import StreamingResponse
         
@@ -493,57 +479,53 @@ def create_app(engine: MultiUserEngine) -> FastAPI:
         if not user:
             raise HTTPException(status_code=401, detail="无效的认证 token")
         
-        if not engine.llm_config:
-            raise HTTPException(status_code=503, detail="LLM 服务未配置")
-        
-        try:
-            from myAgent.llm.client import LLMClient, Message
-            llm_client = LLMClient(engine.llm_config)
-        except Exception as e:
-            raise HTTPException(status_code=503, detail=f"LLM 初始化失败: {e}")
-        
-        # RAG 检索增强
-        rag_context = ""
-        if req_body.rag and engine.rag_store:
-            try:
-                results = engine.rag_store.search(
-                    query=req_body.message,
-                    user_id=user.id,
-                    top_k=3,
-                )
-                if results:
-                    rag_docs = "\n\n--- 参考知识 ---\n" + "\n".join(
-                        f"[{i+1}] {r['content'][:500]}" for i, r in enumerate(results)
-                    )
-                    rag_context = rag_docs
-            except Exception:
-                pass
-        
-        system_prompt = req_body.system + rag_context
-        messages = [
-            Message("system", system_prompt),
-            Message("user", req_body.message),
-        ]
+        # 提交任务到队列
+        task_input: Dict[str, Any] = {
+            "type": "llm_chat",
+            "prompt": req_body.message,
+            "system": req_body.system,
+        }
+        task = await engine.submit_task(
+            user_id=user.id,
+            task_name="llm_chat",
+            input_data=task_input,
+        )
         
         async def event_generator():
-            # 先发送元数据
-            yield f"data: {{\"type\": \"start\", \"model\": \"{llm_client.config.model}\"}}\n\n"
-            
+            # 等待任务完成，逐 chunk 推送
+            import asyncio
             try:
-                # 调用 LLM（非流式，拿到完整回复后逐字发送）
-                response = llm_client.chat(messages=messages)
-                reply = response.content
+                for _ in range(60):
+                    await asyncio.sleep(1)
+                    task_info = await engine.get_task_status(task.id, user.id)
+                    if not task_info:
+                        continue
+                    
+                    if task_info.state.value == "completed":
+                        result = task_info.result or {}
+                        output = result.get("output", "")
+                        model = result.get("model", "unknown")
+                        rag_hits = result.get("rag_hits", 0)
+                        
+                        yield f"data: {{\"type\": \"start\", \"model\": {json.dumps(model)}, \"rag_used\": {json.dumps(bool(rag_hits))}, \"rag_hits\": {rag_hits}}}\n\n"
+                        
+                        # 逐 chunk 发送
+                        for i in range(0, len(output), 10):
+                            chunk = output[i:i+10]
+                            yield f"data: {{\"type\": \"chunk\", \"text\": {json.dumps(chunk, ensure_ascii=False)}}}\n\n"
+                            await asyncio.sleep(0.01)
+                        
+                        yield f"data: {{\"type\": \"done\"}}\n\n"
+                        return
+                    
+                    elif task_info.state.value == "failed":
+                        err_msg = task_info.error or "任务失败"
+                        yield f"data: {{\"type\": \"error\", \"message\": {json.dumps(err_msg)}}}\n\n"
+                        return
                 
-                # 逐字 chunk 发送（模拟流式）
-                for i in range(0, len(reply), 10):
-                    chunk = reply[i:i+10]
-                    yield f"data: {{\"type\": \"chunk\", \"text\": {json.dumps(chunk, ensure_ascii=False)}}}\n\n"
-                    await asyncio.sleep(0.01)
-                
-                # 结束
-                yield f"data: {{\"type\": \"done\"}}\n\n"
-            except Exception as e:
-                yield f"data: {{\"type\": \"error\", \"message\": \"{str(e)}\"}}\n\n"
+                yield f"data: {{\"type\": \"error\", \"message\": \"响应超时\"}}\n\n"
+            except GeneratorExit:
+                pass  # 客户端断开连接
         
         return StreamingResponse(
             event_generator(),
@@ -616,13 +598,13 @@ def create_app(engine: MultiUserEngine) -> FastAPI:
 
     # ========== 带历史的聊天接口 ==========
 
-    @app.post("/api/v1/chat/session")
+    @app.post("/api/v1/chat/session", response_model=ChatResponse)
     async def chat_session(
         req_body: ChatRequest,
         token: str = Header(..., alias="X-Token"),
         engine: MultiUserEngine = Depends(get_engine),
     ):
-        """带会话历史的聊天（自动维护对话上下文）
+        """带会话历史的聊天（基于任务队列）
         
         支持 conversation_id 参数延续历史对话。
         不传则自动创建新会话。
@@ -631,43 +613,12 @@ def create_app(engine: MultiUserEngine) -> FastAPI:
         if not user:
             raise HTTPException(status_code=401, detail="无效的认证 token")
         
-        if not engine.llm_config:
-            raise HTTPException(status_code=503, detail="LLM 服务未配置")
-        
-        try:
-            from myAgent.llm.client import LLMClient, Message
-            llm_client = LLMClient(engine.llm_config)
-        except Exception as e:
-            raise HTTPException(status_code=503, detail=f"LLM 初始化失败: {e}")
-        
-        # RAG 检索
-        rag_context = ""
-        rag_used = False
-        rag_hits = 0
-        if req_body.rag and engine.rag_store:
-            try:
-                results = engine.rag_store.search(
-                    query=req_body.message,
-                    user_id=user.id,
-                    top_k=3,
-                )
-                if results:
-                    rag_docs = "\n\n--- 参考知识 ---\n" + "\n".join(
-                        f"[{i+1}] {r['content'][:500]}" for i, r in enumerate(results)
-                    )
-                    rag_context = rag_docs
-                    rag_used = True
-                    rag_hits = len(results)
-            except Exception:
-                pass
-        
         # 获取或创建会话
         conv_id = req_body.conversation_id
         if not conv_id:
             conv = engine.db.create_conversation(user.id, req_body.message[:50])
             conv_id = conv["id"]
         else:
-            # 确保会话属于当前用户
             with engine.db._get_connection() as conn:
                 row = conn.execute(
                     "SELECT user_id FROM conversations WHERE id = ?", (conv_id,)
@@ -675,31 +626,38 @@ def create_app(engine: MultiUserEngine) -> FastAPI:
                 if not row or row["user_id"] != user.id:
                     raise HTTPException(status_code=403, detail="无权访问此会话")
         
-        # 构建消息历史
-        system_prompt = req_body.system + rag_context
-        messages = [Message("system", system_prompt)]
-        
-        # 加载最近 20 条历史消息
-        hist_msgs = engine.db.get_messages(conv_id, limit=20)
-        for m in hist_msgs:
-            messages.append(Message(m["role"], m["content"]))
-        
-        # 添加当前用户消息
-        messages.append(Message("user", req_body.message))
-        
-        # 调用 LLM
-        response = llm_client.chat(messages=messages)
-        reply = response.content
-        
-        # 保存历史
-        engine.db.add_message(conv_id, "user", req_body.message)
-        engine.db.add_message(conv_id, "assistant", reply)
-        
-        return ChatResponse(
-            reply=reply,
-            model=response.model,
-            rag_used=rag_used,
-            rag_hits=rag_hits,
+        # 提交任务到队列（带 conversation_id）
+        task_input: Dict[str, Any] = {
+            "type": "llm_chat",
+            "prompt": req_body.message,
+            "system": req_body.system,
+            "conversation_id": conv_id,
+        }
+        task = await engine.submit_task(
+            user_id=user.id,
+            task_name="llm_chat",
+            input_data=task_input,
         )
+        
+        # 轮询等待结果
+        import asyncio
+        for _ in range(60):
+            await asyncio.sleep(1)
+            task_info = await engine.get_task_status(task.id, user.id)
+            if task_info and task_info.state.value == "completed":
+                result = task_info.result or {}
+                output = result.get("output", "")
+                model = result.get("model", "unknown")
+                rag_hits = result.get("rag_hits", 0)
+                return ChatResponse(
+                    reply=output,
+                    model=model,
+                    rag_used=bool(rag_hits),
+                    rag_hits=rag_hits,
+                )
+            elif task_info and task_info.state.value == "failed":
+                raise HTTPException(status_code=500, detail=task_info.error or "任务失败")
+        
+        raise HTTPException(status_code=504, detail="LLM 响应超时")
 
     return app

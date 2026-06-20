@@ -772,10 +772,24 @@ class MultiUserEngine:
                     task_type = task.input_data.get("type", "echo")
                     
                     if task_type == "llm_chat" and llm_client:
-                        # LLM 推理任务（RAG 增强）
+                        # LLM 推理任务（RAG 增强 + 会话历史）
                         prompt = task.input_data.get("prompt", "")
                         system = task.input_data.get("system", "你是一个有帮助的AI助手。")
                         from myAgent.llm.client import Message
+                        
+                        # 加载会话历史
+                        conversation_id = task.input_data.get("conversation_id", "")
+                        messages = []
+                        if conversation_id:
+                            # 确保任务属于该用户
+                            with self.db._get_connection() as conn:
+                                row = conn.execute(
+                                    "SELECT user_id FROM conversations WHERE id = ?", (conversation_id,)
+                                ).fetchone()
+                                if row and row["user_id"] == task.user_id:
+                                    hist_msgs = self.db.get_messages(conversation_id, limit=20)
+                                    for m in hist_msgs:
+                                        messages.append(Message(m["role"], m["content"]))
                         
                         # RAG 检索增强
                         rag_context = ""
@@ -795,14 +809,27 @@ class MultiUserEngine:
                             except Exception:
                                 pass  # RAG 失败不影响 LLM 调用
                         
-                        messages = [
-                            Message("system", system + rag_context),
-                            Message("user", prompt),
-                        ]
+                        # 构建消息列表
+                        if messages:
+                            # 有历史：system + history + user
+                            messages.insert(0, Message("system", system + rag_context))
+                        else:
+                            # 无历史：system + user
+                            messages = [
+                                Message("system", system + rag_context),
+                                Message("user", prompt),
+                            ]
+                        
                         response = llm_client.chat(messages=messages)
                         task.result = {"output": response.content, "model": response.model}
                         if response.usage:
                             task.result["usage"] = response.usage
+                        
+                        # 保存会话历史
+                        if conversation_id:
+                            self.db.add_message(conversation_id, "user", prompt)
+                            self.db.add_message(conversation_id, "assistant", response.content)
+                        
                         task.state = TaskState.COMPLETED if response.finish_reason != "error" else TaskState.FAILED
                         if task.state == TaskState.FAILED:
                             task.error = response.content
